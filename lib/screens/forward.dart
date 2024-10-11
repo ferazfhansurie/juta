@@ -532,11 +532,7 @@ print(messages);
   // which you can safely pass to another widget.
        Navigator.pop(context);
     Navigator.pop(context);
- Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (context) => MessageScreen(chatId: chatId,messages: messages,conversation: chat,whapi: widget.whapi,),
-    ),
-  );
+
 } else {
       print('Failed to fetch messages: ${response.body}');
    

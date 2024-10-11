@@ -110,7 +110,7 @@ class _ReportState extends State<Report> with SingleTickerProviderStateMixin {
         children: [
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Text('Total $status: RM ${totalAmount.toStringAsFixed(2)}', style: Theme.of(context).textTheme.headline6),
+            child: Text('Total $status: RM ${totalAmount.toStringAsFixed(2)}', ),
           ),
           Text('$formattedToday',style:TextStyle(fontSize: 15,),),
           SingleChildScrollView(
