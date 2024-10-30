@@ -41,7 +41,7 @@ class _OpportunityListWidgetState extends State<OpportunityListWidget> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height:(kIsWeb)?MediaQuery.of(context).size.height * 60 / 100: MediaQuery.of(context).size.height * 53 / 100,
+      height:MediaQuery.of(context).size.height *8/100,
       child: RefreshIndicator(
         onRefresh: _refreshData,
         child: ListView.builder(

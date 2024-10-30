@@ -26,30 +26,19 @@ class NotificationService {
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('ic_launcher');
 
-    const IOSInitializationSettings initializationSettingsIOS =
-        IOSInitializationSettings(
-      requestAlertPermission: false,
-      requestBadgePermission: false,
-      requestSoundPermission: false,
-    );
 
     const InitializationSettings initializationSettings =
         InitializationSettings(
       android: initializationSettingsAndroid,
-      iOS: initializationSettingsIOS,
+
     );
 
-    await flutterLocalNotificationsPlugin.initialize(initializationSettings,);
+    
+    
 
     if (Platform.isIOS) {
-      const IOSNotificationDetails iOSPlatformChannelSpecifics =
-          IOSNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-      );
-      notificationDetails =
-          const NotificationDetails(iOS: iOSPlatformChannelSpecifics);
+
+    
     } else if (Platform.isAndroid) {
       const AndroidNotificationDetails androidPlatformChannelSpecifics =
           AndroidNotificationDetails('default', 'Default Channel',

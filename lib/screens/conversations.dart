@@ -1,266 +1,678 @@
-// ignore_for_file: must_be_immutable, unnecessary_null_comparison
+// ignore_for_file: must_be_immutable, unnecessary_null_comparison, use_build_context_synchronously, library_private_types_in_public_api
 
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-
-import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:juta_app/screens/dashboard.dart';
+import 'package:juta_app/models/conversations.dart';
+import 'package:juta_app/screens/message.dart';
+import 'package:juta_app/screens/notification.dart';
 import 'package:juta_app/utils/progress_dialog.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:juta_app/utils/toast.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class Conversations extends StatefulWidget {
+  const Conversations({super.key});
+
   @override
   _ConversationsState createState() => _ConversationsState();
 }
 
 class _ConversationsState extends State<Conversations> {
   int currentIndex = 0;
+    int conversationCount = 0;
   TextEditingController searchController = TextEditingController();
   String filter = "";
-  List<Map<String, dynamic>> conversations = [];
+  List<Map<String,dynamic>> conversations = [];
   final GlobalKey progressDialogKey = GlobalKey<State>();
   TextEditingController messageController = TextEditingController();
+  String stageId ="";
   List<Map<String, dynamic>> users = [];
   String botId = '';
   String accessToken = '';
+  String ghlToken = '';
   String nextTokenConversation = '';
+  String prevTokenConversation = '';
   String nextTokenUser = '';
+    String prevTokenUser = '';
   String workspaceId = '';
   String integrationId = '';
   User? user = FirebaseAuth.instance.currentUser;
   String email = '';
   String firstName = '';
-  bool _isLoadingData = false; 
   String company = '';
   String companyId = '';
   final String baseUrl = "https://api.botpress.cloud";
   ScrollController _scrollController = ScrollController();
-  bool _isLoading = false;
+  bool _isLoading = true;
   List<dynamic> allUsers = [];
-  Future<void> fetchConfigurations() async {
-    email = user!.email!;
-       _isLoadingData = true; 
-    await FirebaseFirestore.instance
-        .collection("user")
-        .doc(email)
-        .get()
-        .then((snapshot) {
-      if (snapshot.exists) {
-        setState(() {
-          firstName = snapshot.get("name");
-          company = snapshot.get("company");
-          companyId = snapshot.get("companyId");
-        });
-        print("companyId:" + companyId);
-      } else {
-        print("Snapshot not found");
+    List<dynamic> opportunities = [];
+  List<dynamic> pipelines = [];
+   int currentPage = 1;
+  int totalPages = 10;
+   String nextToken = '';
+    String prevToken = '';
+         String  messageToken ="";
+  String? nextPageUrl;
+  String? prevPageUrl;
+  int fetchedOpportunities = 0;
+  String whapiToken = "Botpress";
+  String ghl ='';
+  String ghl_location = '';
+  String refresh_token ='';
+  String role ="1";
+  List<dynamic> availableTags = [];
+List<dynamic> selectedTags = ['All'];
+bool _isLoadingMore = false;
+bool v2 = false;
+bool isDarkMode = false; // Add this line to track dark mode state
+Future<void> saveDarkModePreference(bool isDarkMode) async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.setBool('isDarkMode', isDarkMode);
+}
+Future<bool> loadDarkModePreference() async {
+  final prefs = await SharedPreferences.getInstance();
+  return prefs.getBool('isDarkMode') ?? false; // Default to false if not set
+}
+Future<List> getLocationTags() async {
+  try {
+    // Predefined tags
+    List<String> predefinedTags = [
+      'Mine',
+      'All',
+      'Unassigned',
+      'Group',
+      'Unread',
+      'Snooze',
+      'Stop Bot'
+    ];
+
+    // Reference to the tags subcollection in Firestore
+    CollectionReference tagsRef = FirebaseFirestore.instance
+        .collection('companies')
+        .doc(companyId)
+        .collection('tags');
+
+    // Get the documents in the tags subcollection
+    QuerySnapshot tagsSnapshot = await tagsRef.get();
+
+    // Clear existing tags
+    availableTags.clear();
+
+    // Add predefined tags first
+    availableTags.addAll(predefinedTags);
+
+    // Add tags from Firebase
+    if (tagsSnapshot.docs.isNotEmpty) {
+      for (var doc in tagsSnapshot.docs) {
+        String tagName = doc.get('name'); // Assuming each tag document has a 'name' field
+        if (!availableTags.contains(tagName)) {
+          availableTags.add(tagName);
+        }
       }
-    }).then((value) {
+    }
+
+    return availableTags;
+  } catch (e) {
+    print('Error loading tags from Firebase: $e');
+    return [];
+  }
+}
+Future<void> toggleTagSelection(String tag) async {
+  setState(()  {
+    if (selectedTags.contains(tag)) {
+      selectedTags.remove(tag);
+       
+    } else {
+      selectedTags.clear();
+      selectedTags.add(tag);
+    }
+  });
+     await fetchContacts();
+}
+
+
+  Future<void> listenNotification() async {
+     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+     await fetchContactsBackground();
+      });
+     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) async {
+      });
+}
+Future<void> fetchConfigurations(bool refresh) async {
+  email = user!.email!;
+  await FirebaseFirestore.instance
+      .collection("user")
+      .doc(email)
+      .get()
+      .then((snapshot) {
+    if (snapshot.exists) {
+      setState(() {
+        firstName = snapshot.get("name") ?? "Default Name";
+        company = snapshot.get("company") ?? "Default Company";
+        companyId = snapshot.get("companyId") ?? "Default CompanyId";
+        role = snapshot.get("role") ?? "Default CompanyId";
+        print('User details - Name: $firstName, Company: $company, Company ID: $companyId');
+      });
+       FirebaseMessaging.instance.subscribeToTopic(companyId);
+    } else {
+      print('User snapshot not found for email: $email');
+    }
+  }).then((value) {
+    if (companyId != null && companyId.isNotEmpty) {
+      print('Fetching company details for companyId: $companyId');
       FirebaseFirestore.instance
           .collection("companies")
           .doc(companyId)
           .get()
           .then((snapshot) async {
         if (snapshot.exists) {
-          setState(() {
-            accessToken = snapshot.get("accessToken");
-            print("accessToken:" + accessToken);
-            botId = snapshot.get("botId");
-            integrationId = snapshot.get("integrationId");
-            workspaceId = snapshot.get("workspaceId");
-          });
-          await fetchUsersAndConversations(botId, accessToken, integrationId);
-         
-        } else {
-          print("Snapshot not found");
-        }
+          print('Company snapshot found for companyId: $companyId');
+             if (mounted) {
+               setState(() {
+                 var automationData = snapshot.data() as Map<String, dynamic>;
+                   if(automationData.containsKey('v2')) {
+                    v2 = snapshot.get("v2");
+                  }
+                  if (automationData.containsKey('ghl_accessToken')){
+      ghl = snapshot.get("ghl_accessToken");
+                }    if (automationData.containsKey('ghl_refreshToken')){
+      refresh_token = snapshot.get("ghl_refreshToken");
+                }
+                  if (automationData.containsKey('ghl_location')){
+      ghl_location = snapshot.get("ghl_location");
+                }
+               if(automationData.containsKey('whapiToken')) {
+                 whapiToken= snapshot.get("whapiToken");
+               }
+               print("whapi"+v2.toString());
            
-      });
-    });
-     _isLoadingData = false; 
-  }
-
-  Future<void> addUserToFirebase(
-      Map<String, dynamic> userData, String companyId) async {
-    try {
-      await FirebaseFirestore.instance
-          .collection("companies")
-          .doc(companyId)
-          .collection("contacts")
-          .doc(userData['id'])
-          .get()
-          .then((snapshot) async {
-        if (!snapshot.exists) {
-          // User doesn't exist, add them to Firebase
-          await FirebaseFirestore.instance
-              .collection("companies")
-              .doc(companyId)
-              .collection("contacts")
-              .doc(userData['id'])
-              .set(userData);
+          });
+                  await getLocationTags();
+                  await fetchEmployeeNames();
+                    await fetchContacts();
+             }
+;
+        } else {
+          print('Company snapshot not found for companyId: $companyId');
         }
       });
-    } catch (e) {
-      print("Error adding user to Firebase: $e");
-    }
-  }
-
-  Future<void> fetchUsersAndConversations(
-      String botId, String accessToken, String integrationId) async {
-    try {
-      // Fetch users
-
-   
-      List users = await listUsers();
-
-      // Fetch conversations
-      List<Map<String, dynamic>> conversations = await listConversations();
-
-      // Match users to conversations based on phone numbers
-      for (var conversation in conversations) {
-        String userPhone = conversation['tags']['whatsapp:userPhone'];
-        var matchedUser = users.firstWhere(
-          (user) =>
-              user['tags'] != null &&
-              user['tags']['whatsapp:userId'] == userPhone,
-          orElse: () => null,
-        );
-
-        if (matchedUser != null &&
-            matchedUser['tags']['whatsapp:name'] != null) {
-          // Add the matched user's name to the conversation
-          var newEntry =
-              MapEntry('whatsapp:name', matchedUser['tags']['whatsapp:name']);
-          List<MapEntry<String, dynamic>> newEntries = [newEntry];
-          conversation.addEntries(newEntries);
-          setState(() {
-  
-    });
-          await addUserToFirebase({
-            'id': matchedUser['tags'][
-                'whatsapp:userId'], // Assuming 'id' is a unique identifier for each user
-            'name': matchedUser['tags']['whatsapp:name'],
-            // Add other user data as needed
-          }, companyId);
-          
-        }
-      }
-
-      // Get latest message timestamps for each conversation
-      List<Future<DateTime>> latestTimestamps = [];
-      List<Future<String>> latestMessages = [];
-      List<Map<String, dynamic>> updatedConversations = [];
-
-      for (var conversation in conversations) {
-        latestTimestamps.add(getLatestMessageTimestamp(conversation['id']));
-        latestMessages.add(getLatestMessage(conversation['id']));
-      }
-
-      // Wait for all the timestamps to be fetched
-      List<DateTime> timestamps = await Future.wait(latestTimestamps);
-      List<String> messages = await Future.wait(latestMessages);
-
-      // Pair each conversation with its latest message timestamp
-      for (int i = 0; i < conversations.length; i++) {
-        Map<String, dynamic> updatedConversation = Map.from(conversations[i]);
-        updatedConversation['latestMessageTimestamp'] = timestamps[i];
-        updatedConversation['latestMessage'] = messages[i];
-        updatedConversations.add(updatedConversation);
-      }
-
-      // Sort conversations by latest message timestamp
-
-      // Extract conversations without the extra timestamp field
-      List<Map<String, dynamic>> sortedConversations = updatedConversations
-          .map((conversation) => {
-                ...conversation,
-                'latestMessageTimestamp':
-                    conversation['latestMessageTimestamp'],
-                'latestMessage': conversation['latestMessage'],
-              })
-          .toList();
-
-      setState(() {
-        this.conversations.addAll(sortedConversations);
-      });
-      print(conversations);
-    } catch (e) {
-      print('Error: $e');
-    }
-  }
-
-  Future<List> listUsers() async {
-    String url = '$baseUrl/v1/chat/users';
-
-    print(integrationId);
-    // Initialize nextToken as null to start with the first page
-
-    // Append nextToken to the URL if available
-    String requestUrl = nextTokenUser != null ? '$url?nextToken=$nextTokenUser' : url;
-
-    http.Response response = await http.get(
-      Uri.parse(requestUrl),
-      headers: {
-        'Content-type': 'application/json',
-        'Authorization': 'Bearer $accessToken',
-        'x-bot-id': botId,
-        'x-integration-id': integrationId,
-      },
-    );
-    print(response.body);
-    if (response.statusCode == 200) {
-      Map<String, dynamic> responseBody = json.decode(response.body);
-      List<dynamic> userList = responseBody['users'];
-
-      if (userList.isNotEmpty) {
-        // Filter and add users with required tags
-        List<dynamic> filteredUsers = userList
-            .where((user) =>
-                user is Map<String, dynamic> &&
-                user.containsKey('tags') &&
-                user['tags'] is Map<String, dynamic> &&
-                user['tags'].containsKey('whatsapp:name') &&
-                user['tags'].containsKey('whatsapp:userId'))
-            .toList();
-        // Add the fetched users to the list
-        allUsers.addAll(filteredUsers);
-
-        // Check if there's a next page
-        nextTokenUser = responseBody['meta']['nextToken'];
-      } else {
-        nextTokenUser = ""; // No more data available
-      }
     } else {
-      throw Exception('Failed to fetch users');
+      print('companyId is null or empty');
     }
+  });
+  print('Configuration fetching complete.');
+}
+Map<String, dynamic> getLatestMessageDetails(Map<String, dynamic> conversation) {
+  String latestMessage = 'No message';
+  DateTime latestTimestamp = DateTime.fromMillisecondsSinceEpoch(0);
 
-    return allUsers;
+  if (conversation['last_message'] != null) {
+    var lastMessage = conversation['last_message'];
+    if (lastMessage['type'] == 'text') {
+      latestMessage = lastMessage['text']?['body'] ?? 'No message';
+    } else if (lastMessage['type'] != 'text') {
+      latestMessage = 'Photo';
+    } else {
+      latestMessage = 'Unsupported message type';
+    }
+    int timestamp = lastMessage['timestamp'] ?? 0;
+    latestTimestamp = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
   }
 
-  List<Map<String, dynamic>> filteredConversations() {
-    return conversations.where((conversation) {
-      String userName = conversation['whatsapp:name'] ?? "";
-      return userName.toLowerCase().contains(filter.toLowerCase());
-    }).map((conversation) {
-      Map<String, dynamic> latestData = conversations
-          .firstWhere((element) => element['id'] == conversation['id']);
+  return {
+    'latestMessageTimestamp': latestTimestamp,
+    'latestMessage': latestMessage,
+  };
+}
 
-      String latestMessage = latestData['latestMessage'] ?? '';
-      DateTime latestTimestamp = latestData['latestMessageTimestamp'] ??
-          DateTime.parse(conversation['updatedAt']);
+Future<void> fetchContacts() async {
+  print('Fetching contacts...');
+  try {
+    setState(() {
+      _isLoading = true;
+    });
+
+    // Fetch contacts from Firestore
+      final companyDocRef = FirebaseFirestore.instance.collection("companies").doc(companyId);
+    final contactsSnapshot = await companyDocRef.collection("contacts")
+        .orderBy('last_message.timestamp', descending: true)
+        .limit(20 * currentPage)
+        .get();
+      var contacts = contactsSnapshot.docs.map((doc) => doc.data()).toList();
+
+    // Fetch pinned contacts and unread counts from Firestore
+    final userDocRef = FirebaseFirestore.instance.collection("user").doc(email);
+    final pinnedContactsSnapshot = await userDocRef.collection("pinned").get();
+    final pinnedContacts = pinnedContactsSnapshot.docs.map((doc) => doc.data()['chat_id']).toList();
+    print("pinned");
+
+    // Merge pinned contacts and unread counts with contact data
+    final List<Map<String, dynamic>> mergedContacts = List<Map<String, dynamic>>.from(contacts).map((contact) {
+      final chatId = contact['chat_id'];
+      final isPinned = pinnedContacts.contains(chatId);
+     final unreadCount = contact['unreadCount'] ?? 0; // Use existing unreadCount or default to 0
 
       return {
+        ...contact,
+        'pinned': isPinned,
+        'unreadCount': unreadCount,
+      };
+    }).toList();
+
+    setState(() {
+      conversations = mergedContacts;
+      _isLoading = false;
+    });
+    print(contacts);
+  } catch (error) {
+    setState(() {
+      _isLoading = false;
+    });
+    print('Error fetching contacts: $error');
+  }
+}
+Future<void> fetchMoreContacts() async {
+  print('Fetching contacts...');
+  try {
+  Toast.show(context, 'success', 'Fetching more data');
+
+    // Fetch contacts from Firestore
+      final companyDocRef = FirebaseFirestore.instance.collection("companies").doc(companyId);
+    final contactsSnapshot = await companyDocRef.collection("contacts")
+        .orderBy('last_message.timestamp', descending: true)
+        .limit(20 * currentPage)
+        .get();
+      var contacts = contactsSnapshot.docs.map((doc) => doc.data()).toList();
+
+    // Fetch pinned contacts and unread counts from Firestore
+    final userDocRef = FirebaseFirestore.instance.collection("user").doc(email);
+    final pinnedContactsSnapshot = await userDocRef.collection("pinned").get();
+    final pinnedContacts = pinnedContactsSnapshot.docs.map((doc) => doc.data()['chat_id']).toList();
+    print("pinned");
+
+
+    // Merge pinned contacts and unread counts with contact data
+    final List<Map<String, dynamic>> mergedContacts = List<Map<String, dynamic>>.from(contacts).map((contact) {
+      final chatId = contact['chat_id'];
+      final isPinned = pinnedContacts.contains(chatId);
+     final unreadCount = contact['unreadCount'] ?? 0; // Use existing unreadCount or default to 0
+
+      return {
+        ...contact,
+        'pinned': isPinned,
+        'unreadCount': unreadCount,
+      };
+    }).toList();
+
+    setState(() {
+      conversations = mergedContacts;
+      _isLoading = false;
+    });
+    print(contacts);
+  } catch (error) {
+  
+    print('Error fetching contacts: $error');
+  }
+}
+Future<void> fetchContactsBackground() async {
+  print('Fetching contacts...');
+  try {
+ 
+
+    // Fetch contacts from Firestore
+      final companyDocRef = FirebaseFirestore.instance.collection("companies").doc(companyId);
+    final contactsSnapshot = await companyDocRef.collection("contacts")
+        .orderBy('last_message.timestamp', descending: true)
+        .limit(20 * currentPage)
+        .get();
+    var contacts = contactsSnapshot.docs.map((doc) => doc.data()).toList();
+
+    // Fetch pinned contacts and unread counts from Firestore
+    final userDocRef = FirebaseFirestore.instance.collection("user").doc(email);
+    final pinnedContactsSnapshot = await userDocRef.collection("pinned").get();
+    final pinnedContacts = pinnedContactsSnapshot.docs.map((doc) => doc.data()['chat_id']).toList();
+    print("pinned");
+
+    // Merge pinned contacts and unread counts with contact data
+    final List<Map<String, dynamic>> mergedContacts = List<Map<String, dynamic>>.from(contacts).map((contact) {
+      final chatId = contact['chat_id'];
+      final isPinned = pinnedContacts.contains(chatId);
+     final unreadCount = contact['unreadCount'] ?? 0; 
+
+      return {
+        ...contact,
+        'pinned': isPinned,
+        'unreadCount': unreadCount,
+      };
+    }).toList();
+
+    setState(() {
+      conversations = mergedContacts;
+
+    });
+    print(contacts);
+  } catch (error) {
+  
+    print('Error fetching contacts: $error');
+  }
+}
+List<String> employeeNames = [];
+Future<void> fetchEmployeeNames() async {
+  try {
+    QuerySnapshot employeeSnapshot = await FirebaseFirestore.instance
+        .collection('companies')
+        .doc(companyId)
+        .collection('employee')
+        .get();
+
+    employeeNames = employeeSnapshot.docs
+        .map((doc) => doc['name'] as String)
+        .map((name) => name.toLowerCase())
+        .toList();
+  } catch (e) {
+    print('Error fetching employee names: $e');
+  }
+}
+List<Map<String, dynamic>> filteredConversations() {
+  List<Map<String, dynamic>> pinnedChats = [];
+  List<Map<String, dynamic>> otherChats = [];
+  List<Map<String, dynamic>> groupChats = conversations.where((contact) => contact['chat_id'] != null && contact['chat_id'].contains('@g.us')).toList();
+    if (!selectedTags.contains('Snooze')) {
+    conversations = conversations.where((conversation) {
+      List<String> tags = List<String>.from(conversation['tags'] ?? []);
+      return !tags.any((tag) => tag.toLowerCase() == 'snooze');
+    }).toList();
+  }
+
+if (selectedTags.isEmpty || selectedTags.contains('All')) {
+conversations = conversations;
+  }  else if (selectedTags.contains('Mine')) {
+     conversations = conversations.where((conversation) {
+      List<String> tags = List<String>.from(conversation['tags'] ?? []);
+      return tags.any((tag) => tag.toLowerCase() == firstName.toLowerCase());
+    }).toList();
+  } else if (selectedTags.contains('Group')) {
+    conversations = conversations.where((conversation) =>
+      conversation['chat_id'] != null && conversation['chat_id'].contains('@g.us')
+    ).toList();
+  }else if (selectedTags.contains('Snooze')) {
+    conversations = conversations.where((conversation) {
+      List<String> tags = List<String>.from(conversation['tags'] ?? []);
+      return tags.any((tag) => tag.toLowerCase() == 'snooze');
+    }).toList();
+  } else if (selectedTags.contains('Unread')) {
+    conversations = conversations.where((conversation) =>
+      (conversation['unreadCount'] ?? 0) > 0
+    ).toList();
+  }  else if (selectedTags.contains('Unassigned')) {
+    conversations = conversations.where((conversation) {
+      List<String> tags = List<String>.from(conversation['tags'] ?? []);
+      return !tags.any((tag) => employeeNames.contains(tag.toLowerCase()));
+    }).toList();
+  } else {
+  conversations = conversations.where((conversation) {
+    List<dynamic> conversationTags = (conversation['tags'] ?? []).map((tag) => tag.toString().toLowerCase()).toList();
+    return selectedTags.any((selectedTag) => conversationTags.contains(selectedTag.toLowerCase()));
+  }).toList();
+}
+   conversations = conversations.take(1000).toList();
+  // Filter conversations based on user role and tags
+  if (role == "2" || role == "4") {
+    conversations = conversations.where((conversation) {
+      List<String> tags = List<String>.from(conversation['tags'] ?? []);
+      return tags.any((tag) => tag.toLowerCase() == firstName.toLowerCase());
+    }).toList();
+
+  //  conversations.addAll(groupChats);
+  }
+
+  // Separate pinned and non-pinned chats
+  conversations.forEach((conversation) {
+    if (conversation['pinned']) {
+      pinnedChats.add(conversation);
+    } else {
+      otherChats.add(conversation);
+    }
+  });
+
+  // Function to get latest message details
+  Map<String, dynamic> getLatestMessageDetails(Map<String, dynamic> conversation) {
+    String latestMessage = 'No message';
+    DateTime latestTimestamp = DateTime.fromMillisecondsSinceEpoch(0);
+
+    if (conversation['last_message'] != null) {
+      var lastMessage = conversation['last_message'];
+      if (lastMessage is Map<String, dynamic>) {
+        if (lastMessage['type'] == 'text') {
+          latestMessage = lastMessage['text']?['body'] ?? 'No message';
+        } else if (lastMessage['type'] != 'text') {
+          latestMessage = lastMessage['type'] ?? 'Media';
+        } else {
+          latestMessage = 'Unsupported message type';
+        }
+      } else if (lastMessage is List) {
+        // Handle list type
+        latestMessage = lastMessage.isNotEmpty ? lastMessage.first.toString() : 'No message';
+      } else if (lastMessage is String) {
+        // Handle string type
+        latestMessage = lastMessage;
+      } else {
+        latestMessage = 'Unsupported message format';
+      }
+     var timestamp = lastMessage['timestamp'];
+    if (timestamp is Timestamp) {
+      latestTimestamp = timestamp.toDate();
+    } else if (timestamp is int) {
+      latestTimestamp = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
+    } else {
+      print('Unexpected timestamp type: ${timestamp.runtimeType}');
+      latestTimestamp = DateTime.now(); // Fallback to current time
+    }
+    }
+
+    return {
+      'latestMessageTimestamp': latestTimestamp,
+      'latestMessage': latestMessage,
+    };
+  }
+
+  // Add latest message details to chats
+  List<Map<String, dynamic>> addLatestMessageDetails(List<Map<String, dynamic>> chats) {
+    return chats.map((conversation) {
+      var latestDetails = getLatestMessageDetails(conversation);
+      return {
         ...conversation,
-        'latestMessageTimestamp': latestTimestamp,
-        'latestMessage': latestMessage,
+        'latestMessageTimestamp': latestDetails['latestMessageTimestamp'],
+        'latestMessage': latestDetails['latestMessage'],
       };
     }).toList();
   }
+
+  pinnedChats = addLatestMessageDetails(pinnedChats);
+  otherChats = addLatestMessageDetails(otherChats);
+
+  // Sort pinned and other chats by timestamp
+  pinnedChats.sort((a, b) {
+    return b['latestMessageTimestamp'].compareTo(a['latestMessageTimestamp']);
+  });
+  
+  otherChats.sort((a, b) {
+    return b['latestMessageTimestamp'].compareTo(a['latestMessageTimestamp']);
+  });
+
+  // Combine sorted pinned and other chats
+  List<Map<String, dynamic>> sortedConversations = [...pinnedChats, ...otherChats];
+
+  // Filter by search term
+  String searchTerm = searchController.text.toLowerCase();
+  if (searchTerm.isNotEmpty) {
+    sortedConversations = sortedConversations.where((conversation) {
+      String userName = (conversation['chat']?['name'] ?? '').toLowerCase();
+      String phoneNumber = (conversation['id'] ?? '').toLowerCase(); // Assuming 'id' contains the phone number
+      String latestMessage = (conversation['latestMessage'] ?? '').toLowerCase();
+      return userName.contains(searchTerm) || phoneNumber.contains(searchTerm) || latestMessage.contains(searchTerm);
+    }).toList();
+  }
+
+  return sortedConversations;
+}
+
+void _showAddTagDialog(Map<String, dynamic> conversation, ColorScheme colorScheme) {
+  List<String> specialTags = ['Mine', 'All', 'Unassigned', 'Group', 'Unread'];
+  List<dynamic> allTags = availableTags.where((tag) => !specialTags.contains(tag)).toList();
+  List<String> selectedTags = List<String>.from(conversation['tags'] ?? [])
+    .where((tag) => !specialTags.contains(tag)).toList();
+  String newTag = '';
+
+  // Add a list of employee names
+  
+  List<String> selectedEmployees = [];
+
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            backgroundColor: colorScheme.background,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Text('Manage Tags', style: TextStyle(color: colorScheme.onBackground, fontWeight: FontWeight.bold)),
+            content: Container(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Expanded(
+                    child: ListView(
+                      children: [
+                        Text('Tags', style: TextStyle(color: colorScheme.onBackground, fontWeight: FontWeight.bold)),
+                        ...allTags.map((tag) => Card(
+                          color: colorScheme.surface,
+                          child: CheckboxListTile(
+                            title: Text(tag, style: TextStyle(color: colorScheme.onSurface)),
+                            value: selectedTags.contains(tag),
+                            activeColor: colorScheme.primary,
+                            checkColor: colorScheme.onPrimary,
+                            onChanged: (bool? value) {
+                              setState(() {
+                                if (value == true) {
+                                  selectedTags.add(tag);
+                                } else {
+                                  selectedTags.remove(tag);
+                                }
+                              });
+                            },
+                          ),
+                        )).toList(),
+                        SizedBox(height: 16),
+                        Text('Assign to Employee', style: TextStyle(color: colorScheme.onBackground, fontWeight: FontWeight.bold)),
+                        ...employeeNames.map((employee) => Card(
+                          color: colorScheme.surface,
+                          child: CheckboxListTile(
+                            title: Text(employee, style: TextStyle(color: colorScheme.onSurface)),
+                            value: selectedEmployees.contains(employee),
+                            activeColor: colorScheme.primary,
+                            checkColor: colorScheme.onPrimary,
+                            onChanged: (bool? value) {
+                              setState(() {
+                                if (value == true) {
+                                  selectedEmployees.add(employee);
+                                } else {
+                                  selectedEmployees.remove(employee);
+                                }
+                              });
+                            },
+                          ),
+                        )).toList(),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: 16),
+                  TextField(
+                    style: TextStyle(color: colorScheme.onBackground),
+                    decoration: InputDecoration(
+                      hintText: "Enter new tag",
+                      hintStyle: TextStyle(color: colorScheme.onBackground.withOpacity(0.6)),
+                      filled: true,
+                      fillColor: colorScheme.surface,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      newTag = value;
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: <Widget>[
+              TextButton(
+                child: Text('Cancel', style: TextStyle(color: colorScheme.primary)),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+              ElevatedButton(
+                child: Text('Add New Tag'),
+               
+                onPressed: () {
+                  if (newTag.isNotEmpty && !allTags.contains(newTag)) {
+                    setState(() {
+                      allTags.add(newTag);
+                      selectedTags.add(newTag);
+                      newTag = '';
+                    });
+                  }
+                },
+              ),
+              ElevatedButton(
+                child: Text('Save'),
+                
+                onPressed: () {
+                  List<String> updatedTags = [...selectedTags, ...selectedEmployees];
+                  _updateConversationTags(conversation, updatedTags);
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+Future<void> _updateConversationTags(Map<String, dynamic> conversation, List<String> newTags) async {
+  try {
+    // Update the conversation in Firestore
+    await FirebaseFirestore.instance
+      .collection('companies')
+      .doc(companyId)
+      .collection('contacts')
+      .doc(conversation['id'])
+      .update({'tags': newTags});
+    
+    // Update the local state
+    setState(() {
+      conversation['tags'] = newTags;
+      // Trigger a re-filter of conversations
+      conversations = List.from(conversations);
+    });
+    
+_handleRefresh();
+  } catch (e) {
+    print('Error updating tags: $e');
+  
+  }
+}
 
   void onSearchTextChanged(String text) {
     setState(() {
@@ -268,1063 +680,642 @@ class _ConversationsState extends State<Conversations> {
     });
   }
 
-  Future<List<Map<String, dynamic>>> listConversations() async {
-    String url = '$baseUrl/v1/chat/conversations';
-  String requestUrl = nextTokenConversation != "" ? '$url?nextToken=$nextTokenConversation' : url;
-    http.Response response = await http.get(
-      Uri.parse(requestUrl),
-      headers: {
-        'Content-type': 'application/json',
-        'Authorization': 'Bearer $accessToken',
-        'x-bot-id': botId,
-        'x-integration-id': integrationId,
-      },
-    );
-    print(response.body);
-    if (response.statusCode == 200) {
-      Map<String, dynamic> responseBody = json.decode(response.body);
-      List<dynamic> conversationList = responseBody['conversations'];
-      nextTokenConversation = responseBody['meta']['nextToken'];
-      print(nextTokenConversation);
-      // Filter out conversations that are not related to WhatsApp
-      List whatsappConversations = conversationList
-          .where((conversation) =>
-              conversation['tags'] != null &&
-              conversation['tags']['whatsapp:userPhone'] != null)
-          .toList();
-
-      return whatsappConversations.cast<Map<String, dynamic>>();
-    } else {
-      throw Exception('Failed to load conversations');
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> listMessages(String conversationId) async {
-    String url = '$baseUrl/v1/chat/messages';
-
-    url = '$url?conversationId=$conversationId';
-
-    http.Response response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Content-type': 'application/json',
-        'Authorization': 'Bearer $accessToken',
-        'x-bot-id': botId,
-        'x-integration-id': integrationId,
-      },
-    );
-    print(response.body);
-    if (response.statusCode == 200) {
-      Map<String, dynamic> responseBody = json.decode(response.body);
-      List<dynamic> messages = responseBody['messages'];
-      for (int i = 0; i < messages.length; i++) {
-        print(messages[i]['userId']);
-      }
-      return messages.cast<Map<String, dynamic>>();
-    } else {
-      throw Exception('Failed to load messages');
-    }
-  }
-
-  void navigateToMessageScreen(List<Map<String, dynamic>> messages,
-      Map<String, dynamic> conversation, String id) {
-    ProgressDialog.unshow(context, progressDialogKey);
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => MessageScreen(
-          messages: messages,
-          conversation: conversation,
-          accessToken: accessToken,
-          botId: botId,
-          integrationId: integrationId,
-          workspaceId: workspaceId,
-          id: id,
-          userId: messages.first['userId'] ?? "",
-        ),
-      ),
-    );
-  }
-
-  Future<void> _handleRefresh() async {
-    await fetchConfigurations();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _scrollController.addListener(_scrollListener);
-    Firebase.initializeApp().whenComplete(() {
-      setState(() {});
-    });
-    _handleRefresh();
-  }
-
-  void _scrollListener() {
-    if (_scrollController.position.pixels ==
-        _scrollController.position.maxScrollExtent) {
-      // User has reached the end of the list, load more conversations
-      _loadMoreConversations();
-    }
-  }
-
-  void _loadMoreConversations() async {
-    if (_isLoading) return; // Prevent multiple simultaneous requests
+Future<void> _handleRefresh() async {
+  setState(() {
+    _isLoading = true;
+    conversations.clear();
+  });
+await fetchContacts();
+}
+@override
+void initState() {
+  super.initState();
+  _scrollController.addListener(_scrollListener);
+  loadDarkModePreference().then((value) {
     setState(() {
-      _isLoading = true;
+      isDarkMode = value;
     });
-
-    try {
-      
-          await fetchUsersAndConversations(botId,accessToken,integrationId);
-
-    
-    } catch (e) {
-      print('Error loading more conversations: $e');
-    } finally {
+  });
+  listenNotification();
+    fetchConfigurations(false);
+}
+void _scrollListener() async {
+  if (_scrollController.position.pixels == _scrollController.position.maxScrollExtent) {
+    if (!_isLoadingMore && currentPage < totalPages) {
       setState(() {
-        _isLoading = false;
+        _isLoadingMore = true;
+      });
+      currentPage++;
+      await fetchMoreContacts();
+      setState(() {
+        _isLoadingMore = false;
       });
     }
   }
+}
+Future<void> markConversationAsRead(String chatId) async {
+  try {
+    // Update the unreadCount in Firestore
+    await FirebaseFirestore.instance
+      .collection('companies')
+      .doc(companyId)
+      .collection('contacts')
+      .doc(chatId)
+      .update({'unreadCount': 0});
 
-
-  Future<String> getLatestMessage(String conversationId) async {
-    String url = '$baseUrl/v1/chat/messages?conversationId=$conversationId';
-
-    http.Response response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Content-type': 'application/json',
-        'Authorization': 'Bearer $accessToken',
-        'x-bot-id': botId,
-        'x-integration-id': integrationId,
-      },
-    );
-
-    if (response.statusCode == 200) {
-      Map<String, dynamic> responseBody = json.decode(response.body);
-      List<dynamic> messages = responseBody['messages'];
-
-      if (messages.isNotEmpty) {
-        String latestMessage = "";
-        for (var i = messages.length - 1; i >= 0; i--) {
-          latestMessage = messages[i]['payload']['text']??"";
+    // Update the local state
+    setState(() {
+      conversations = conversations.map((conversation) {
+        if (conversation['chat_id'] == chatId) {
+          return {...conversation, 'unreadCount': 0};
         }
-
-        return latestMessage;
-      } else {
-        return ""; // Return a default value if no messages found
-      }
-    } else {
-      throw Exception('Failed to fetch messages');
-    }
-  }
-
-  Future<DateTime> getLatestMessageTimestamp(String conversationId) async {
-    String url = '$baseUrl/v1/chat/messages?conversationId=$conversationId';
-
-    http.Response response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Content-type': 'application/json',
-        'Authorization': 'Bearer $accessToken',
-        'x-bot-id': botId,
-        'x-integration-id': integrationId,
-      },
-    );
-
-    if (response.statusCode == 200) {
-      Map<String, dynamic> responseBody = json.decode(response.body);
-      List<dynamic> messages = responseBody['messages'];
-
-      if (messages.isNotEmpty) {
-        DateTime latestTimestamp = DateTime.parse(
-            messages[0]['createdAt']); // Get the latest message timestamp
-
-        return latestTimestamp;
-      } else {
-        return DateTime(0); // Return a default value if no messages found
-      }
-    } else {
-      throw Exception('Failed to fetch messages');
-    }
-  }Future<void> conversationPage() async {
-    // Use a GlobalKey to access the Scaffold and open the drawer
-   setState(() {
-      currentIndex = 1;
+        return conversation;
+      }).toList();
     });
+
+    print('Marked conversation as read: $chatId');
+  } catch (error) {
+    print('Error marking conversation as read: $error');
   }
+}
+
+ void toggleDarkMode() {
+  setState(() {
+    isDarkMode = !isDarkMode;
+    saveDarkModePreference(isDarkMode); // Save the preference
+  });
+}
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        padding: EdgeInsets.only(
-          top: MediaQuery.of(context).padding.top,
-          left: 20,
+      
+  
+  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
+    statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
+  ));
+    final colorScheme = isDarkMode
+        ? ColorScheme.dark(
+            primary: Color(0xFF101827),
+            secondary: Colors.tealAccent,
+            surface: Color(0xFF1F2937),
+            background: Color(0xFF101827),
+            onBackground: Colors.white,
+          )
+        : ColorScheme.light(
+            primary: Color(0xFF2D3748),
+            secondary: Color(0xFF2D3748),
+            surface: Colors.white,
+            background: Colors.white,
+            onBackground: Color(0xFF2D3748),
+          );
+
+    return Theme(
+      data: ThemeData(
+        colorScheme: colorScheme,
+        scaffoldBackgroundColor: colorScheme.background,
+        appBarTheme: AppBarTheme(
+          backgroundColor: colorScheme.background,
+          foregroundColor: colorScheme.onBackground,
         ),
-        color: const Color.fromARGB(255, 0, 0, 0), // Background color
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                              children: [
-                                GestureDetector(
-                                  onTap: () {
-                                        Navigator.of(context).push(
-                                        CupertinoPageRoute(builder: (context) {
-                                      return Dashboard(
-                                      conversation:conversationPage ,openDrawerCallback: (){},
-                                      );
-                                    }));
-                                  },
-                                  child: Icon(
-                                    CupertinoIcons.chevron_back,
-                                    color: Colors.white,
-                                    size: 35,
-                                  ),
-                                ),
-                                SizedBox(width: 20,),
-                                
-                                Spacer(),
-                                /* GestureDetector(
-                                  onTap: () {
-                                    _showAddContact();
-                                  },
-                                  child: Icon(
-                                    CupertinoIcons.add,
-                                    color: Colors.white,
-                                    size: 25,
-                                  ),
-                                ),*/
-                             
-                                Row(
-                                  children: [
-                                   
-                                    SizedBox(
-                                      width: 10,
-                                    ),
-                                  
-                                  ],
-                                ),
-                              
-                                SizedBox(
-                                  width: 10,
-                                ),
-                              ],
-                            ),
-                  SizedBox(
-                    height: 10,
-                  ),
-                  Text("Conversations",
-                      textAlign: TextAlign.start,
-                      style: TextStyle(
-                          fontSize: 20,
-                                           fontFamily: 'SF',
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white)),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Container(
-                decoration: BoxDecoration(
-                    color: Color.fromARGB(255, 19, 19, 19),
-                    borderRadius: BorderRadius.circular(15)),
-                height: 35,
-                child: TextField(
-                  style: const TextStyle(color: Colors.white,
-                                           fontFamily: 'SF',),
-                  cursorColor: Colors.white,
-                  controller: searchController,
-                  onChanged: onSearchTextChanged,
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    focusColor: Colors.white,
-                    hoverColor: Colors.white,
-                    hintText: 'Search',
-                    hintStyle:
-                        TextStyle(color: Color(0xFFB3B3B3),
-                                           fontFamily: 'SF', fontSize: 15),
-                    prefixIcon: Icon(
-                      Icons.search,
-                      size: 22,
-                      color: Color(0xFFB3B3B3),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Flexible(
-              child: RefreshIndicator(
-                color: Colors.black,
-                onRefresh: _handleRefresh,
-                child: _isLoadingData
-              ? Center(
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                  ),
-                )
-              :ListView.builder(
-                  controller: _scrollController,
-                  padding: EdgeInsets.zero,
-                  itemCount: filteredConversations().length,
-                  itemBuilder: (context, index) {
+        // ... other theme properties ...
+      ),
+      child: Scaffold(
+        resizeToAvoidBottomInset: true,
+        body: SingleChildScrollView(
+          physics: NeverScrollableScrollPhysics(),
+          child: Container(
+            padding: EdgeInsets.only(
+              top: MediaQuery.of(context).padding.top,
               
-                    final conversation = filteredConversations()[index];
-                    final id = conversation['id'];
-                    final userName = conversation['whatsapp:name'];
-                    final number = conversation['latestMessage'];
-
-                    DateTime latestMessageTimestamp =
-                        conversation['latestMessageTimestamp'];
-                    DateTime today = DateTime.now();
-                    Duration difference =
-                        today.difference(latestMessageTimestamp);
-
-                    String updatedAtText = difference.inDays == 0
-                        ? 'Today'
-                        : (difference.inDays == 1
-                            ? 'Yesterday'
-                            : '${latestMessageTimestamp.day}/${latestMessageTimestamp.month}/${latestMessageTimestamp.year}');
-
-                    return Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: GestureDetector(
-                        onTap: () {
-                          ProgressDialog.show(context, progressDialogKey);
-
-                          listMessages(id).then((messages) {
-                            navigateToMessageScreen(messages, conversation, id);
-                          });
-                        },
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(100),
-                              ),
-                              child: Icon(
-                                CupertinoIcons.person_circle_fill,
-                                color: Color(0xFFB3B3B3),
-                                size: 45,
-                              ),
-                            ),
-                            SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.start,
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Divider(
-                                    height: 1,
-                                    color: Color.fromARGB(255, 19, 19, 19),
-                                    thickness: 1,
-                                  ),
-                                  SizedBox(height: 5),
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Container(
-                                        width: 165,
-                                        child: Text(
-                                          userName ?? "Webchat",
-                                          maxLines: 1,
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                           fontFamily: 'SF',
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 16,
-                                          ),
-                                        ),
-                                      ),
-                                     
-                                      Text(
-                                       updatedAtText,
-                                        style: const TextStyle(
-                                          color: Color(0xFFB3B3B3),
-                                           fontFamily: 'SF',
-                                        fontSize: 11
-                                      
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  Container(
-                                    height: 30,
-                                    child: Text(
-                                      number ?? "",
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: Color(0xFFB3B3B3),
-                                           fontFamily: 'SF',
-                                        fontWeight: FontWeight.w400,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
+              left: 20,
+            ),
+            height: MediaQuery.of(context).size.height,
+            color: colorScheme.background,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        company,
+                        textAlign: TextAlign.start,
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontFamily: 'SF',
+                          fontWeight: FontWeight.bold,
+                          color: colorScheme.onBackground,
                         ),
                       ),
-                    );
-                  },
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class MessageScreen extends StatefulWidget {
-  List<Map<String, dynamic>> messages;
-  final Map<String, dynamic> conversation;
-  String? botId;
-  String? accessToken;
-  String? workspaceId;
-  String? integrationId;
-  String? id;
-  String? userId;
-  MessageScreen(
-      {required this.messages,
-      required this.conversation,
-      this.botId,
-      this.accessToken,
-      this.workspaceId,
-      this.integrationId,
-      this.id,
-      this.userId});
-
-  @override
-  _MessageScreenState createState() => _MessageScreenState();
-}
-
-class _MessageScreenState extends State<MessageScreen> {
-  TextEditingController _messageController = TextEditingController();
-
-  bool typing = false;
-  bool expand = false;
-  double height = 60;
-  bool hasNewline = false;
-  bool nowHasNewline = false;
-  final String baseUrl = "https://api.botpress.cloud";
-  @override
-  void initState() {
-    super.initState();
-
-    _messageController.addListener(() {
-      String value = _messageController.text;
-      List<String> lines = value.split('\n');
-      int newHeight = 60 + (lines.length - 1) * 25;
-
-      if (value.length > 29) {
-        int additionalHeight = ((value.length - 1) ~/ 29) * 25;
-        newHeight += additionalHeight;
-      }
-
-      setState(() {
-        height = newHeight.clamp(60, 200).toDouble();
-      });
-    });
-  }
-
-  Future<void> _handleImageMessage(Map<String, dynamic> message) async {
-    final type = message['type'];
-    if (type == 'image') {
-      print('User sent an image');
-      print('Message data: $message'); // Print the data of the incoming message
-
-      // Add your logic for handling image messages here
-    }
-  }
-
-  Future<List<Map<String, dynamic>>> listMessages(String botId,
-      String accessToken, String integrationId, String conversationId) async {
-    String url = '$baseUrl/v1/chat/messages';
-
-    url = '$url?conversationId=$conversationId';
-
-    http.Response response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Content-type': 'application/json',
-        'Authorization': 'Bearer $accessToken',
-        'x-bot-id': botId,
-        'x-integration-id': integrationId,
-      },
-    );
-    print(response.body);
-    if (response.statusCode == 200) {
-      Map<String, dynamic> responseBody = json.decode(response.body);
-      List<dynamic> messages = responseBody['messages'];
-
-      return messages.cast<Map<String, dynamic>>();
-    } else {
-      throw Exception('Failed to load messages');
-    }
-  }
-
-  Future<Map<String, dynamic>?> createMessage({
-    required String payloadType,
-    required String userId,
-    required String conversationId,
-    required String messageType,
-    required Map<String, dynamic> tags,
-    Map<String, dynamic>? schedule,
-    required String text,
-  }) async {
-    String url = '$baseUrl/v1/chat/messages';
-    Map<String, dynamic> requestBody = {
-      'payload': {
-        'type': payloadType,
-        'text': text
-      }, // Include the text property
-      'userId': userId,
-      'conversationId': conversationId,
-      'type': messageType,
-      'tags': tags,
-    };
-
-    if (schedule != null) {
-      requestBody['schedule'] = schedule;
-    }
-
-    http.Response response = await http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-type': 'application/json',
-        'Authorization': 'Bearer ${widget.accessToken}',
-        'x-bot-id': widget.botId!,
-        'x-integration-id': widget.integrationId!,
-      },
-      body: json.encode(requestBody),
-    );
-    print(response.body);
-    if (response.statusCode == 200) {
-      return json.decode(response.body);
-    } else {
-      return null;
-    }
-  }
-
-  Future<void> sendMessage() async {
-    String messageText = _messageController.text;
-    if (messageText.isNotEmpty) {
-      Map<String, dynamic> tags = {}; // Replace with your tags
-
-      createMessage(
-        payloadType: 'Text',
-        userId: widget.userId!,
-        conversationId: widget.id!,
-        messageType: 'text',
-        tags: tags,
-        text: messageText,
-      ).then((createdMessage) async {
-        print('Created Text Message: $createdMessage');
-
-        // Refresh the message list after sending a message
-        await _refreshMessages();
-      }).catchError((e) {
-        print('Error sending message: $e');
-      });
-      _messageController.clear();
-    }
-  }
-
-  Future<void> _refreshMessages() async {
-    List<Map<String, dynamic>> updatedMessages = await listMessages(
-        widget.botId!,
-        widget.accessToken!,
-        widget.integrationId!,
-        widget.conversation['id']);
-    setState(() {
-      widget.messages = updatedMessages;
-    });
-  }
-
-  void _showImageDialog() async {
-    final picker = ImagePicker();
-
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
-    if (pickedFile != null) {
-      // Handle the picked image
-      // For example, you can upload it or display it in your UI
-      // The picked image file can be accessed using pickedFile.path
-    }
-  }
-
-  Future<void> _showDocumentDialog() async {
-    final picker = ImagePicker();
-
-    final pickedFile = await picker.pickMedia();
-
-    if (pickedFile != null) {
-      // Handle the picked image
-      // For example, you can upload it or display it in your UI
-      // The picked image file can be accessed using pickedFile.path
-    }
-  }
-  void _showConfirmDelete() {
-    showCupertinoModalPopup(
-      context: context,
-      builder: (BuildContext context) {
-        return Container(
-          height: MediaQuery.of(context).size.height *
-              0.5, // Adjust height as needed
-          color: Colors.black,
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 40,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 35,
-                  ),
-                  Center(
-                      child: Text(
-                    'Detail',
-                    style: TextStyle(color: Colors.white,
-                                           fontFamily: 'SF',),
-                  ))
-                ],
-              ),
-              Divider(
-                color: Colors.white,
-              ),
-              Text(widget.conversation['whatsapp:name'] ?? "",
-                    style: TextStyle(color: Colors.white,
-                                           fontFamily: 'SF',),),
-                                           Spacer(),
-               GestureDetector(
-                onTap: (){
-                 deleteConversation(widget.conversation['id'] );
-                },
-                 child: Container(
-                             margin:
-                    const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-                             padding: const EdgeInsets.all(8.0),
-                             decoration: BoxDecoration(
-                  color:Color.fromARGB(141, 235, 17, 17),
-                  borderRadius: BorderRadius.circular(12),
-                             ),
-                             child: Text(
-                  "Delete Conversation",
-                  style: const TextStyle(fontSize: 16.0, color: Colors.white,
-                                             fontFamily: 'SF',),
-                             ),
-                           ),
-               ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-  void _showQuickRepliesPopup() {
-    showCupertinoModalPopup(
-      context: context,
-      builder: (BuildContext context) {
-        return Container(
-          height: MediaQuery.of(context).size.height *
-              0.5, // Adjust height as needed
-          color: Colors.black,
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(8.0),
-                    child: Icon(
-                      Icons.close,
-                      color: Colors.white,
-                      size: 40,
-                    ),
-                  ),
-                  SizedBox(
-                    width: 35,
-                  ),
-                  Center(
-                      child: Text(
-                    'Quick Replies',
-                    style: TextStyle(color: Colors.white,
-                                           fontFamily: 'SF',),
-                  ))
-                ],
-              ),
-              Divider(
-                color: Colors.white,
-              ),
-              Expanded(
-                child: ListView.builder(
-                    itemCount: 2,
-                    itemBuilder: ((context, index) {
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisAlignment: MainAxisAlignment.start,
+                      Row(
                         children: [
-                          Text(
-                            'Quick Reply $index',
-                            style: TextStyle(color: Colors.white,
-                                           fontFamily: 'SF',),
+                          GestureDetector(
+                            onTap: () async {
+                              TextEditingController numberController = TextEditingController();
+                              await showDialog(
+                                context: context,
+                                builder: (BuildContext context) {
+                                  return Container(
+                                     width: MediaQuery.of(context).size.width * 0.9, // Set width to 90% of screen width
+                                    child: AlertDialog(
+                                        backgroundColor: colorScheme.background,
+                                      title: Text('Enter Number',style: TextStyle(color: colorScheme.onBackground)),
+                                      content: Row(
+                                        children: [
+                                          Text('+60',style: TextStyle(color: colorScheme.onBackground)),
+                                          SizedBox(width: 10,),
+                                          Container(
+                                            width: 200,
+                                            child: TextField(
+                                              controller: numberController,
+                                              keyboardType: TextInputType.phone,
+                                              style: TextStyle(color: colorScheme.onBackground),
+                                              decoration: InputDecoration(hintText: 'Enter phone number',hintStyle: TextStyle(color: colorScheme.onBackground)),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      actions: <Widget>[
+                                        TextButton(
+                                          onPressed: () {
+                                            Navigator.of(context).pop();
+                                          },
+                                          child: Text('Cancel',style: TextStyle(color: colorScheme.onBackground),),
+                                        ),
+                                        ElevatedButton(
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: colorScheme.background,
+                                           
+                                          ),
+                                          onPressed: () {
+                                            String phoneNumber = "+60"+numberController.text.trim();
+                                            print(phoneNumber);
+                                            String chat = phoneNumber+"@s.whatsapp.net";
+                                              print(chat);
+                                            String chatId = chat.split('+')[1];
+                                            print(chatId);
+                                            Navigator.of(context).pop();
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (context) => MessageScreen(chatId: chatId, messages: [], conversation: {}, whapi: whapiToken, name: phoneNumber, phone: phoneNumber,accessToken: ghl,location: ghl_location,userName:firstName),
+                                              ),
+                                            );
+                                          },
+                                          child: Text('Message',style: TextStyle(color: colorScheme.onBackground),),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Icon(Icons.add, size: 30, color: colorScheme.onBackground),
+                            ),
                           ),
-                          Divider(
-                            color: Colors.white,
+                          GestureDetector(
+                            onTap: () async {
+                              setState(() {
+                                conversations.clear();
+                                _isLoading = true;
+                              });
+                              _handleRefresh();
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Icon(Icons.refresh,size: 30,color: colorScheme.onBackground,),
+                            ),
+                          ),
+                           IconButton(
+                            icon: Icon(
+                            Icons.notifications,
+                              color: colorScheme.onBackground,
+                            ),
+                            onPressed: (){
+                              Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (context) => NotificationScreen(),
+                                            ),
+                                          );
+                            },
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              isDarkMode ? Icons.light_mode : Icons.dark_mode,
+                              color: colorScheme.onBackground,
+                            ),
+                            onPressed: toggleDarkMode,
                           ),
                         ],
-                      );
-                    })),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-Future<void> deleteConversation(String conversationId) async {
-  String url = '$baseUrl/v1/chat/conversations/$conversationId';
-
-  http.Response response = await http.delete(
-    Uri.parse(url),
-    headers: {
-      'Content-type': 'application/json',
-      'Authorization': 'Bearer ${widget.accessToken}',
-      'x-bot-id': widget.botId!,
-      'x-integration-id': widget.integrationId!,
-    },
-  );
-  if (response.statusCode == 200) {
-    print('Conversation deleted');
-    Navigator.pop(context);
-     Navigator.pop(context);
-    // Optionally, navigate away or update the UI
-  } else {
-    print('Failed to delete conversation');
-    // Handle error
-  }
-}
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            GestureDetector(
-                onTap: () {
-                  Navigator.of(context).pop();
-                },
-                child: const Icon(CupertinoIcons.chevron_back,size: 40,
-                    color: Colors.white)),
-            const SizedBox(
-              width: 25,
-            ),
-            const Icon(
-              CupertinoIcons.person_alt_circle_fill,
-              color: Colors.white,
-              size: 25,
-            ),
-            SizedBox(
-              width: 5,
-            ),
-            Text(widget.conversation['whatsapp:name'] ?? ""),
-            Spacer(),
-             GestureDetector(
-              onTap: (){
-                print(widget.conversation);
-                _launchWhatsapp(widget.conversation['tags']['whatsapp:userPhone']);
-              },
-               child: Image.asset(
-                                        'assets/images/whatsapp.png',
-                                        fit: BoxFit.contain,
-                                        scale: 10,
-                                      ),
-             ),
-            SizedBox(width: 10,),
-            GestureDetector(
-              onTap: (){
-              
-                _launchURL("tel:${widget.conversation['tags']['whatsapp:userPhone']}");
-              },
-              child: Icon(CupertinoIcons.phone_fill,size: 30,)),
-                 SizedBox(width: 20,),
-                  GestureDetector(
-                    onTap: (){
-                      _showConfirmDelete();
-                    },
-                    child: const Icon(
-                                CupertinoIcons.ellipsis,
-                                color: Colors.white,
-                                size: 25,
-                              ),
-                  ),
-          ],
-        ),
-        backgroundColor: Colors.black, // Secondary color
-      ),
-      body: RefreshIndicator(
-        color: Colors.black,
-        onRefresh: _refreshMessages,
-        child: GestureDetector(
-          onTap: () {
-            FocusScope.of(context).unfocus();
-            setState(() {
-              typing = false;
-            });
-          },
-          child: Column(
-            children: <Widget>[
-              Expanded(
-                child: Container(
-                  color: const Color.fromARGB(255, 0, 0, 0), // Background color
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(10),
-                    itemCount: widget.messages.length,
-                    reverse: true, // To display messages from the bottom
-                    itemBuilder: (context, index) {
-                      _handleImageMessage(widget.messages[index]);
-                      final message = widget.messages[index];
-
-                      final payload = message['payload'];
-                      final type = message['type'];
-                      final isSent = message['direction'] == 'outgoing';
-                      final messageText = payload['text'];
-                      final messageImage = payload['imageUrl'];
-
-                      if (type == 'text') {
-                        return Align(
-                          alignment: isSent
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                          child: _buildMessageBubble(isSent, messageText, []),
-                        );
-                      } else if (type == 'image') {
-                        return Align(
-                          alignment: isSent
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 8.0),
-                            child: Image.network(
-                              messageImage,
-                              height: 250,
-                              width: 250,
-                            ),
-                          ),
-                        );
-                      } else if (type == 'choice') {
-                        print(message);
-                        return Align(
-                            alignment: isSent
-                                ? Alignment.centerRight
-                                : Alignment.centerLeft,
-                            child: _buildMessageBubble(
-                                isSent, messageText, payload['options']));
-                      }
-
-                      return const SizedBox
-                          .shrink(); // Hide if type is not recognized
-                    },
-                  ),
-                ),
-              ),
-              Card(
-                elevation: 5,
-                child: Container(
-                  height: height, // Set your desired height here
-                  color: Colors.black, // Background color
-                  child: Row(
-                    children: <Widget>[
-                      (typing == false)
-                          ? IconButton(
-                              icon: const Icon(Icons.image),
-                              onPressed: _showImageDialog,
-                              color: Color(0xFFB3B3B3), // Secondary color
-                            )
-                          : Padding(
-                              padding: EdgeInsets.only(right: 5),
-                              child: GestureDetector(
-                                  onTap: () {
-                                    typing == false;
-                                  },
-                                  child: const Icon(
-                                    CupertinoIcons.chevron_back,
-                                    color: Color(0xFFB3B3B3),
-                                    size: 30,
-                                  )),
-                            ),
-                      (typing == false)
-                          ? IconButton(
-                              icon: const Icon(Icons.attach_file),
-                              onPressed: _showDocumentDialog,
-                              color: Color(0xFFB3B3B3), // Secondary color
-                            )
-                          : Container(),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8.0),
-                          child: Container(
-                            decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(100),
-                                color: Colors.black,
-                                border: Border.all(color: Color(0xFFB3B3B3))),
-                            child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 5),
-                              child: Row(
-                                children: [
-                                  
-                                  Flexible(
-                                    child: TextField(
-                                      onTap: () {
-                                        setState(() {
-                                          typing = true;
-                                        });
-                                      },
-                                      onTapOutside: (event) {
-                                        setState(() {
-                                          typing = false;
-                                        });
-                                      },
-                                      maxLines: null,
-                                      expands: true,
-                                      style:
-                                          const TextStyle(color: Colors.white,
-                                           fontFamily: 'SF',),
-                                      controller: _messageController,
-                                      decoration: const InputDecoration(
-                                        border: InputBorder.none,
-                                      ),
-                                    ),
-                                  ),
-                                  IconButton(
-                                    highlightColor: Color(0xFF0D85FF),
-                                    padding: EdgeInsets.zero,
-                                    iconSize: 30,
-                                    icon: const Icon(
-                                        CupertinoIcons.upload_circle_fill),
-                                    onPressed: sendMessage,
-                                    color: const Color(
-                                        0xFF0D85FF), // Secondary color
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
                       ),
                     ],
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-  _launchURL(String url) async {
-    await launch(Uri.parse(url).toString());
-  }
-
-  void _launchWhatsapp(String number) async {
-    String url = 'https://wa.me/$number';
-    try {
-      await launch(url);
-    } catch (e) {
-      throw 'Could not launch $url';
-    }
-  }
-  Widget _buildMessageBubble(
-      bool isSent, String message, List<dynamic>? options) {
-    print(options);
-    return Container(
-       alignment: isSent ? Alignment.centerRight : Alignment.centerLeft,
-      width: MediaQuery.of(context).size.width * 70 / 100,
-      child: Align(
-        alignment: isSent ? Alignment.centerRight : Alignment.centerLeft,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.end,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Container(
-              margin:
-                  const EdgeInsets.symmetric(vertical: 4.0, horizontal: 8.0),
-              padding: const EdgeInsets.all(8.0),
-              decoration: BoxDecoration(
-                color: isSent
-                    ? const Color(0xFF0D85FF)
-                    : const Color.fromARGB(141, 124, 124, 124),
-                borderRadius: BorderRadius.circular(8.0),
-              ),
-              child: Text(
-                message,
-                style: const TextStyle(fontSize: 16.0, color: Colors.white,
-                                           fontFamily: 'SF',),
-              ),
-            ),
-            if (options!.isNotEmpty)
-              Align(
-                alignment: Alignment.centerRight,
-                child: Container(
-             
-                  child: ListView.builder(
-                    itemCount: options.length,
-                   shrinkWrap: true,
-                    scrollDirection: Axis.vertical,
-                    physics: NeverScrollableScrollPhysics(),
-                    itemBuilder: (context, index) {
-                      return Container(
-                        margin: const EdgeInsets.symmetric(
-                            vertical: 4.0, horizontal: 8.0),
-                        padding: const EdgeInsets.all(8.0),
-                        decoration: BoxDecoration(
-                          color: const Color.fromARGB(141, 124, 124, 124),
-                          borderRadius: BorderRadius.circular(8.0),
+                Padding(
+                  padding: const EdgeInsets.all(2),
+                  child: Container(
+                    height: 30,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: colorScheme.onBackground),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: TextField(
+                      style: TextStyle(
+                        color: colorScheme.onBackground,
+                        fontFamily: 'SF',
+                      ),
+                      cursorColor: colorScheme.onBackground,
+                      controller: searchController,
+                      onChanged: onSearchTextChanged,
+                      decoration: InputDecoration(
+                        border: InputBorder.none,
+                        focusColor: colorScheme.onBackground,
+                        hoverColor: colorScheme.onBackground,
+                        hintText: 'Search',
+                        hintStyle: TextStyle(
+                          color: colorScheme.onBackground.withOpacity(0.6),
+                          fontFamily: 'SF',
+                          fontSize: 13,
                         ),
-                        child: Center(
+                        prefixIcon: Icon(
+                          Icons.search,
+                          size: 20,
+                          color: colorScheme.onBackground,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                Container(
+                  height: 30,
+                  padding: EdgeInsets.only(top:5),
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: availableTags.length,
+                    itemBuilder: (context, index) {
+                      String tag = availableTags[index];
+                      bool isSelected = selectedTags.contains(tag);
+                      return GestureDetector(
+                        onTap: () => toggleTagSelection(tag),
+                        child: Container(
+                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          margin: EdgeInsets.only(right: 15),
+                          decoration: BoxDecoration(
+                            color: isSelected ? Colors.blueGrey : Colors.grey[200],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                           child: Text(
-                            options[index]['label'].toString(),
-                            style: const TextStyle(
-                                fontSize: 16.0, color: Color(0xFF0D85FF),
-                                           fontFamily: 'SF',),
+                            tag,
+                            style: TextStyle(
+                              color: isSelected ? Colors.white : Colors.black,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       );
                     },
                   ),
+),
+
+
+                Container(
+                height: MediaQuery.of(context).size.height *79/100,
+                child: RefreshIndicator(
+             
+                  onRefresh: _handleRefresh,
+                  child: _isLoading
+                ?  Center(
+                    child: CircularProgressIndicator(
+                       color: colorScheme.onBackground
+                    ),
+                  )
+                : ListView.builder(
+                        controller: _scrollController,
+                         padding: EdgeInsets.only(bottom: 80),
+                        itemCount: filteredConversations().length,
+                        itemBuilder: (context, index) {
+                          final conversation = filteredConversations()[index];
+                          final pic = (conversation['profilePicUrl']!= null||conversation['profilePicUrl']!='')?conversation['profilePicUrl']:null;
+                         final number = (conversation['phone'] != null && conversation['phone'].contains('+'))
+    ? conversation['phone'].split("+")[1]
+    : conversation['phone'];
+                          final userName = (conversation['chat']?['name'] != null)?conversation['chat']['name'] :"+"+ number;
+                          final latestMessage = conversation['latestMessage'] ?? 'No message';
+                     
+                          final latestTimestamp = conversation['latestMessageTimestamp'] ?? DateTime.now();
+                          var unread = (conversation['unreadCount'] != null)?conversation['unreadCount']:0;
+                          var tags = (conversation['tags'] != null)?conversation['tags']:[];
+                          final now = DateTime.now();
+  final yesterday = DateTime(now.year, now.month, now.day - 1);
+  final lastWeek = now.subtract(Duration(days: now.weekday));
+  final lastMessageDateTime = latestTimestamp.toLocal();
+  String formattedDate;
+  if (lastMessageDateTime.day == now.day &&
+      lastMessageDateTime.month == now.month &&
+      lastMessageDateTime.year == now.year) {
+    formattedDate = DateFormat.jm().format(lastMessageDateTime);
+  } else if (lastMessageDateTime.day == yesterday.day &&
+      lastMessageDateTime.month == yesterday.month &&
+      lastMessageDateTime.year == yesterday.year) {
+    formattedDate = 'Yesterday';
+  } else if (lastMessageDateTime.isAfter(lastWeek)) {
+    formattedDate = DateFormat('EEEE').format(lastMessageDateTime);
+  } else {
+    formattedDate = DateFormat('dd/MM/yyyy').format(lastMessageDateTime);
+  }
+  int phoneIndex = (conversation['phoneIndex'] != null)?conversation['phoneIndex']:0;
+                          final numberOnly = (conversation['chat_id'] != null)?(!conversation['chat_id']?.contains('@g'))?number ?? '':'Group':"";
+                          return GestureDetector(
+                           onLongPress: role != "2" ? () => _showAddTagDialog(conversation, colorScheme) : null,
+                                  onTap: () async {
+                                       ProgressDialog.show(context, progressDialogKey);
+  print(numberOnly);
+                                       if (conversation['unreadCount'] != 0) {
+    await markConversationAsRead("+"+numberOnly);
+  }
+                                print(conversation);
+                             
+ fetchMessagesForChat(conversation['chat_id'], conversation, userName, numberOnly,pic,conversation['phone'],tags,phoneIndex);
+                                  },
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                         height: 50,
+                                         width: 50,
+                                          decoration: BoxDecoration(
+                                          color: Color(0xFF2D3748),
+                                          borderRadius: BorderRadius.circular(100),
+                                        ),
+                                        child: Center(
+    child: (conversation['profilePicUrl'] == null || conversation['profilePicUrl'].isEmpty)
+      ? Icon(CupertinoIcons.person_fill, size: 45, color: Colors.white)
+      : ClipOval(
+          child: Image.network(
+            conversation['profilePicUrl'],
+            fit: BoxFit.cover,
+            width: 50,
+            height: 50,
+            errorBuilder: (context, error, stackTrace) {
+              return Icon(CupertinoIcons.person_fill, size: 45, color: Colors.white);
+            },
+          ),
+        ),
+  ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          mainAxisAlignment: MainAxisAlignment.start,
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const SizedBox(height: 5),
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Container(
+                                                  width: 180,
+                                                  child: Text(
+                                                    userName ?? "Webchat",
+                                                    maxLines: 1,
+                                                    style:  TextStyle(
+                                                      color:  colorScheme.onBackground,
+                                                     fontFamily: 'SF',
+                                                      fontWeight: FontWeight.w700,
+                                                      fontSize: 16,
+                                                    ),
+                                                  ),
+                                                ),
+                                                Row(
+                                                  children: [
+                                                    Text(
+                                                     //updatedAtText,
+                                                     formattedDate,
+                                                      style:  TextStyle(
+                                                        color:(unread != 0)?Colors.red :colorScheme.onBackground,
+                                                         fontFamily: 'SF',
+                                                      fontSize: 10
+                                                      ),
+                                                    ),
+                                                  
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Container(
+                                                  height: 25,
+                                                  child: Row(
+                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                    children: [
+                                                      Container(
+                                                        width: 220,
+                                                        child: Text(
+                                                          latestMessage ?? "",
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                          style:  TextStyle(
+                                                            color:  colorScheme.onBackground,
+                                                               fontFamily: 'SF',
+                                                               fontSize: 12,
+                                                            fontWeight: FontWeight.w400,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                   
+                                                       Row(
+                                                         children: [
+                                                           if (conversation['pinned'])
+                                                            Icon(CupertinoIcons.pin_fill, size: 16, color:colorScheme.onBackground),
+                                                             if(unread != 0)
+                                                           Container(
+                                                             height: 15,
+                                                             width: 15,
+                                                             decoration: BoxDecoration(
+                                                               borderRadius: BorderRadius.circular(100),
+                                                               color: Colors.redAccent
+                                                             ),
+                                                             child: Center(
+                                                               child: Text(
+                                                                 unread.toString(),
+                                                                 style: TextStyle(color: Colors.white, fontSize: 10),
+                                                               ),
+                                                             ),
+                                                           ),
+                                                         ],
+                                                       ),
+                                                
+                                                   
+                                                    ],
+                                                  ),
+                                                ),
+                                                    if (tags.isNotEmpty)
+                                                  Wrap(
+                                                    spacing: 4.0,
+                                                    runSpacing: 4.0,
+                                                    children: tags.map<Widget>((tag) {
+                                                      return Container(
+                                                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                        decoration: BoxDecoration(
+                                                          color: Colors.blueGrey,
+                                                          borderRadius: BorderRadius.circular(4),
+                                                        ),
+                                                        child: Text(
+                                                          tag,
+                                                          style: TextStyle(
+                                                            color: Colors.white,
+                                                            fontSize: 12,
+                                                          ),
+                                                        ),
+                                                      );
+                                                    }).toList(),
+                                                  ),
+                                              ],
+                                            ),
+                                         
+                                                  SizedBox(height: 5,),
+                                              const Divider(
+                                              height: 1,
+                                           color: Color.fromARGB(255, 153, 155, 158),
+                                              thickness: 1,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                               
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                 ),
-              )
-          ],
+              ),
+             
+            ],
+          ),
         ),
       ),
-    );
+    ));
   }
+Future<void> fetchMessagesForChat(String chatId, dynamic chat, String name, String phone, String? pic, String contactId, List<dynamic> tags,int phoneIndex) async {
+  try {
+    List<Map<String, dynamic>> messages = [];
+print(v2);
+    if (v2) {
+      // Fetch messages from Firebase
+      QuerySnapshot messagesSnapshot = await FirebaseFirestore.instance
+          .collection('companies')
+          .doc(companyId)
+          .collection('contacts')
+          .doc(contactId)
+          .collection('messages')
+          .orderBy('timestamp', descending: true)
+          .limit(100)  // Adjust the limit as needed
+          .get();
+
+      messages = messagesSnapshot.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+      print(messages[0]);
+    } else {
+      // Fetch messages from Whapi API
+      String url = 'https://gate.whapi.cloud/messages/list/$chatId';
+      var response = await http.get(
+        Uri.parse(url),
+        headers: {
+          'Authorization': 'Bearer $whapiToken',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        var data = json.decode(response.body);
+        messages = (data['messages'] is List)
+            ? data['messages'].cast<Map<String, dynamic>>()
+            : [];
+      } else {
+        print('Failed to fetch messages: ${response.body}');
+        return;
+      }
+    }
+
+    ProgressDialog.hide(progressDialogKey);
+
+    Navigator.of(context)
+        .push(CupertinoPageRoute(builder: (context) {
+      return MessageScreen(
+        companyId: companyId,
+        contactId: contactId,
+        tags: tags,
+        chatId: chatId,
+        messages: messages,
+        conversation: chat,
+        whapi: whapiToken,
+        name: name,
+        accessToken: ghl,
+        phone: phone,
+        pic: pic,
+        location: ghl_location,
+      userName:firstName,
+      phoneIndex: phoneIndex,
+      );
+    })).then((_) {
+      // Refresh contacts after coming back from the MessageScreen
+      fetchContacts();
+    });
+  } catch (e) {
+    print('Error fetching messages for chat: $e');
+    ProgressDialog.hide(progressDialogKey);
+  }
+}
+Future<dynamic> getContact(String number) async {
+  // API endpoint
+  var url = Uri.parse('https://services.leadconnectorhq.com/contacts/search/duplicate');
+
+  // Request headers
+  var headers = {
+    'Authorization': 'Bearer ${ghl}',
+    'Version': '2021-07-28',
+    'Accept': 'application/json',
+  };
+
+  // Request parameters
+  var params = {
+    'locationId': ghl_location,
+    'number': number,
+  };
+
+  // Send GET request
+  var response = await http.get(url.replace(queryParameters: params), headers: headers);
+print(response);
+  // Handle response
+  if (response.statusCode == 200) {
+    // Success
+    var data = jsonDecode(response.body);
+    print(data['contact']);
+    setState(() {
+     
+    });
+    return data['contact'];
+  } else {
+    // Error
+    print('Failed to get contact. Status code: ${response.statusCode}');
+    print('Response body: ${response.body}');
+    return null;
+  }
+}
 }

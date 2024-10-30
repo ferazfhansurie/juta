@@ -20,11 +20,14 @@
   ],
   "hosting": {
     "public": "build/web",
-    "site":"jutacrm",
+    "site": "jutacrm",
     "ignore": [
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
     ]
+  },
+  "storage": {
+    "rules": "storage.rules"
   }
 }

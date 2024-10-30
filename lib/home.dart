@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:juta_app/screens/dashboard.dart';
 import 'package:juta_app/screens/appointment.dart';
 import 'package:juta_app/screens/automation.dart';
+import 'package:juta_app/screens/notification.dart';
 import 'package:juta_app/services/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'screens/conversations.dart';
@@ -24,23 +25,22 @@ class CustomTabBar extends StatefulWidget {
 class _CustomTabBarState extends State<CustomTabBar> {
   @override
   Widget build(BuildContext context) {
-    return (kIsWeb)?Container():Padding(
-      padding: EdgeInsets.symmetric(horizontal: 65, vertical: 10),
+    return (kIsWeb) ? Container() : Padding(
+      padding: EdgeInsets.only(bottom: 20, left: 65, right: 65), // Updated padding
       child: Container(
         width: 50,
-        height: 45,
-        decoration: BoxDecoration(
-            color: Color(0xFF3790DD), borderRadius: BorderRadius.circular(100)),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            buildTabItem(Icons.home_filled, 0),
-            buildTabItem(Icons.message, 1),
-          //  buildTabItem(Icons.android , 2),
-           buildTabItem(CupertinoIcons.calendar, 3),
-              
-          ],
+        height: 65,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              buildTabItem(Icons.home_filled, 0),
+             //buildTabItem(Icons.notifications, 1),
+              //buildTabItem(CupertinoIcons.calendar, 3),
+            ],
+          ),
         ),
       ),
     );
@@ -55,7 +55,7 @@ class _CustomTabBarState extends State<CustomTabBar> {
       child: Container(
         child: Icon(
           icon,
-          size: 25,
+          size: 35,
           color: isSelected ? Colors.white : Color(0xFFB3B3B3),
         ),
       ),
@@ -235,16 +235,12 @@ class _HomeState extends State<Home> {
       body:IndexedStack(
         index: currentIndex,
         children: [
-          Dashboard(openDrawerCallback: openDrawer,conversation: conversationPage,),
           Conversations(),
-          AutomationScreen(),
-          Appointment(),
+          //NotificationScreen(),
+          //Appointment(),
         ],
       ),
-      bottomNavigationBar: (kIsWeb )? null :CustomTabBar(
-        currentIndex: currentIndex,
-        onTap: onTap,
-      ),
+
     );
   }
 }

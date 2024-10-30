@@ -1,4 +1,4 @@
-
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
@@ -24,7 +24,8 @@ import 'package:pdfx/pdfx.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:path_provider/path_provider.dart';
-
+import 'package:flutter_slidable/flutter_slidable.dart';
+import 'package:flutter/gestures.dart';
 
 class MessageScreen extends StatefulWidget {
   List<Map<String, dynamic>> messages;
@@ -122,6 +123,8 @@ class _MessageScreenState extends State<MessageScreen> {
 List<dynamic> tags =[];
   Map<String, Uint8List?> _pdfCache = {};
     bool isDarkMode = false;
+StreamSubscription<RemoteMessage>? _notificationSubscription;
+  Map<String, dynamic>? replyToMessage;
 
   @override
   void initState() {
@@ -160,14 +163,38 @@ List<dynamic> tags =[];
     loadMoreMessages();
   }
 }
-  Future<void> listenNotification() async {
-     FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
-      widget.messages.clear();
-      });
+Future<void> listenNotification() async {
+    _notificationSubscription = FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+      try {
+        List<Map<String, dynamic>> messages = [];
+        print('Notification received: ${message.notification?.title}');
 
+        // Fetch messages from Firestore
+        QuerySnapshot messagesSnapshot = await FirebaseFirestore.instance
+            .collection('companies')
+            .doc(widget.companyId)
+            .collection('contacts')
+            .doc(widget.contactId)
+            .collection('messages')
+            .orderBy('timestamp', descending: true)
+            .limit(100) // Adjust the limit as needed
+            .get();
 
-print(tags);
-}
+        messages = messagesSnapshot.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+        print(messages);
+
+        // Update the state if the widget is still mounted
+        if (mounted) {
+          setState(() {
+            widget.messages = messages; // Update the messages list
+          });
+        }
+      } catch (e) {
+        print('Error fetching messages: $e'); // Handle any errors
+      }
+    });
+  }
+
 void showToast(String message) {
   fluttertoast.Fluttertoast.showToast(
     msg: message,
@@ -334,13 +361,15 @@ Future<void> sendImageMessage(String to, PlatformFile? imageFile, String caption
   print(response.body);
     if (response.statusCode == 200) {
       print('Image message sent successfully');
-
+      final response2 = await http.get(Uri.parse(imageUrl));
+      
+  String base64Image = base64Encode(response2.bodyBytes);
       // Create a new message object
       Map<String, dynamic> newMessage = {
         'type': 'image',
         'from_me': true,
         'image': {
-          'url': imageUrl,
+          'data': base64Image,
         },
         'caption': caption,
         'timestamp': DateTime.now().millisecondsSinceEpoch ~/ 1000,
@@ -415,6 +444,7 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
   @override
   void dispose() {
     _controller?.dispose();
+    _notificationSubscription?.cancel(); // Cancel the subscription
     super.dispose();
   }
 
@@ -603,13 +633,45 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
       }
 
       String formattedTime = DateFormat('h:mm a').format(parsedDateTime); // Format for time
+      print(message); 
                       if (type == 'text') {
                           final messageText = message['text']['body'];
-                        return Align(
-                          alignment: isSent
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                          child: _buildMessageBubble(isSent, messageText, [],formattedTime,colorScheme),
+                        return Draggable<Map<String, dynamic>>(
+                          // Data is the message map
+                          data: message,
+                          // Specify the axis as horizontal to limit dragging to left/right
+                          axis: Axis.horizontal,
+                          // The child is your existing message bubble
+                          child: Align(
+                            alignment: isSent ? Alignment.centerRight : Alignment.centerLeft,
+                            child: _buildMessageBubble(isSent, messageText, [], formattedTime, colorScheme,message),
+                          ),
+                          // The feedback widget is what appears under the user's finger while dragging
+                          feedback: Material(
+                            color: Colors.transparent,
+                            child: Opacity(
+                              opacity: 0.7,
+                              child: _buildMessageBubble(isSent, messageText, [], formattedTime, colorScheme,message),
+                            ),
+                          ),
+                          // onDragEnd is called when the user lifts their finger
+                          onDragEnd: (details) {
+                            if (details.offset.dx < -50 && isSent) {  // Dragged left
+                              setState(() {
+                                print(message);
+                                replyToMessage = message;
+                              });
+                            }else if (!isSent && details.offset.dx > 50) {  // Received message dragged right
+      setState(() {
+        replyToMessage = message;
+      });
+    }
+                          },
+                          // childWhenDragging is the widget that stays in place while dragging
+                          childWhenDragging: Opacity(
+                            opacity: 0.0,
+                            child: _buildMessageBubble(isSent, messageText, [], formattedTime, colorScheme,message),
+                          ),
                         );
                       } else if (type == 'document' &&  message['document']['link'] != null) {
                            final documentLink = message['document']['link'];
@@ -774,7 +836,7 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
                                 ? Alignment.centerRight
                                 : Alignment.centerLeft,
                             child: _buildMessageBubble(
-                                isSent, messageText, message['poll']['options'],formattedTime,colorScheme));
+                                isSent, messageText, message['poll']['options'],formattedTime,colorScheme,message ));
                       }
                       
                       return const SizedBox
@@ -791,7 +853,7 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
                           alignment: isSent
                               ? Alignment.centerRight
                               : Alignment.centerLeft,
-                          child: _buildMessageBubble(isSent, messageText, [],formattedTime,colorScheme),
+                          child: _buildMessageBubble(isSent, messageText, [],formattedTime,colorScheme,message),
                         );
                    }
          
@@ -848,6 +910,63 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
       padding: const EdgeInsets.all(5),
       child: Column(
         children: [
+          if (replyToMessage != null)
+              Container(
+              
+                             color: const Color.fromARGB(255, 57, 57, 57),
+                child: Row(
+                  children: [
+                    Container(
+                     width: 10,
+                     height: 50,
+                      decoration: BoxDecoration(
+                        color: replyToMessage!['from_me']
+                              ? const Color(0xFFDCF8C6) : colorScheme.onBackground,
+                       
+                      ),
+                    ),
+                    SizedBox(width: 5,),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                            Text(
+                            replyToMessage!['from_me']
+                              ?'You':widget.name!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: replyToMessage!['from_me']
+                              ? const Color(0xFFDCF8C6) : colorScheme.onBackground,
+                              fontSize: 15,
+                              fontFamily: 'SF',
+                            ),
+                          ),
+                          Text(
+                            '${replyToMessage!['text']['body']}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontFamily: 'SF',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () {
+                        setState(() {
+                          replyToMessage = null;
+                        });
+                      },
+                    ),
+                  ],
+                ),
+              ),
           Container(
            
             child: Row(
@@ -955,14 +1074,13 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
                           // Create a new message object
     
                          // Update the UI
-   
-                        await sendImageMessage(
-                            widget.conversation['id'],
-                            pickedFile!,
-                            _messageController.text);
-      
+                        if (widget.chatId != null) {
+                          await sendImageMessage(
+                              widget.chatId!,
+                              pickedFile!,
+                              _messageController.text);
+                        }
                       }
-                    
                        
                     },
                     color: Color.fromARGB(255, 255, 255, 255),
@@ -991,11 +1109,12 @@ Future<void> sendTextMessage(String to, String messageText) async {
   setState(() {
     _messageController.clear();  
   });
+
   try {
     String url = 'https://mighty-dane-newly.ngrok-free.app/api/v2/messages/text/${widget.companyId}/${widget.chatId}';
     var body = json.encode({
       'message': messageText,
-      'quotedMessageId': null, // Add logic for reply if needed
+      'quotedMessageId': replyToMessage?['id'], // Add logic for reply if needed
       'phoneIndex': 0,
       'userName': widget.userName,
     });
@@ -1010,6 +1129,10 @@ Future<void> sendTextMessage(String to, String messageText) async {
 
     if (response.statusCode == 200) {
       // Message sent successfully
+     
+      setState(() {
+         replyToMessage = null;
+      });
       print('Message sent successfully');
     } else {
       // Handle error
@@ -1178,7 +1301,7 @@ Future<void> sendTextMessage(String to, String messageText) async {
     }
   }
 Widget _buildMessageBubble(
-    bool isSent, String message, List<dynamic>? options, String time,ColorScheme colorScheme) {
+    bool isSent, String message, List<dynamic>? options, String time,ColorScheme colorScheme,Map<String, dynamic> messageData) {
   return GestureDetector(
     onLongPress: () {
       _showOptions(message);
@@ -1204,14 +1327,76 @@ Widget _buildMessageBubble(
                   Padding(
                     padding: const EdgeInsets.only(
                         right: 50.0, top: 8.0, bottom: 8.0),
-                    child: Text(
-                      message,
-                      style:  TextStyle(
-                        fontSize: 14.0,
-                        color: isSent ? Color.fromARGB(255, 0, 0, 0) :colorScheme.background,
-                        fontWeight: FontWeight.w500,
-                        fontFamily: 'SF',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if(messageData['text']['context'] != null)
+                         Container(
+          
+                         decoration: BoxDecoration(
+                         color: const Color.fromARGB(255, 206, 206, 206),
+                          borderRadius: BorderRadius.circular(8.0),
+                         ),
+                           child: Row(
+                             children: [
+                               Container(
+                     width: 10,
+                     height: 35,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.only(
+      topLeft: Radius.circular(5),
+      bottomLeft: Radius.circular(5),
+    ),
+                        color: messageData!['from_me']
+                              ? const Color.fromARGB(255, 147, 147, 147) : colorScheme.background,
+                       
                       ),
+                    ),
+                    SizedBox(width: 5,),
+                               Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                 children: [
+                                   Text(
+                            messageData!['text']['context']['quoted_author'] != widget.name
+                              ?'You':widget.name!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: isSent
+                              ? const  Color.fromARGB(255, 147, 147, 147) : colorScheme.background,
+                              fontSize: 14,
+                              fontFamily: 'SF',
+                            ),
+                          ),
+                                   Container(
+                                          width: MediaQuery.of(context).size.width * 40 / 100,
+                                     child: Text(
+                                      messageData['text']['context']['quoted_content']['body'],
+                                      style:  TextStyle(
+                                        fontSize: 12.0,
+                                        color: isSent ? Color.fromARGB(255, 0, 0, 0) :colorScheme.background,
+                                        fontWeight: FontWeight.w500,
+                                        fontFamily: 'SF',
+                                      ),
+                                        maxLines: 1,
+                                                       overflow: TextOverflow.ellipsis,
+                                                             ),
+                                   ),
+                                 ],
+                               ),
+                             ],
+                           ),
+                         ),
+                        Text(
+                          message,
+                          style:  TextStyle(
+                            fontSize: 14.0,
+                            color: isSent ? Color.fromARGB(255, 0, 0, 0) :colorScheme.background,
+                            fontWeight: FontWeight.w500,
+                            fontFamily: 'SF',
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   Positioned(
