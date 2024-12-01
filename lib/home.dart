@@ -4,11 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:juta_app/screens/dashboard.dart';
-import 'package:juta_app/screens/appointment.dart';
-import 'package:juta_app/screens/automation.dart';
-import 'package:juta_app/screens/notification.dart';
-import 'package:juta_app/services/auth_service.dart';
+  import 'package:juta_app/services/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'screens/conversations.dart';
 

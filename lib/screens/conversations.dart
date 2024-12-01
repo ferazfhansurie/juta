@@ -15,6 +15,7 @@ import 'package:juta_app/screens/notification.dart';
 import 'package:juta_app/utils/progress_dialog.dart';
 import 'package:juta_app/utils/toast.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
 
 class Conversations extends StatefulWidget {
   const Conversations({super.key});
@@ -47,6 +48,8 @@ class _ConversationsState extends State<Conversations> {
   String firstName = '';
   String company = '';
   String companyId = '';
+  String? userPhone = '';
+  Map<String, String> phoneNames = {};
   final String baseUrl = "https://api.botpress.cloud";
   ScrollController _scrollController = ScrollController();
   bool _isLoading = true;
@@ -156,8 +159,9 @@ Future<void> fetchConfigurations(bool refresh) async {
         firstName = snapshot.get("name") ?? "Default Name";
         company = snapshot.get("company") ?? "Default Company";
         companyId = snapshot.get("companyId") ?? "Default CompanyId";
-        role = snapshot.get("role") ?? "Default CompanyId";
-        print('User details - Name: $firstName, Company: $company, Company ID: $companyId');
+        role = snapshot.get("role") ?? "Default CompanyId"; userPhone = snapshot.get("phone")?.toString(); // Add this line
+        print('User details - Name: $firstName, Company: $company, Company ID: $companyId, Phone: $userPhone');
+
       });
        FirebaseMessaging.instance.subscribeToTopic(companyId);
     } else {
@@ -179,6 +183,23 @@ Future<void> fetchConfigurations(bool refresh) async {
                    if(automationData.containsKey('v2')) {
                     v2 = snapshot.get("v2");
                   }
+                  if(automationData.containsKey('phoneCount')){
+                              String phoneCount = snapshot.get("phoneCount");
+                              int phoneCountInt = int.parse(phoneCount);
+                  phoneNames.clear(); // Clear existing phone names
+                  for (int i = 0; i < phoneCountInt; i++) { // Changed from <= to <
+                    String phoneKey = 'phone${i+1}';
+                    if (automationData.containsKey(phoneKey)) {
+                      String phoneName = snapshot.get(phoneKey) ?? '';
+                      if (phoneName.isNotEmpty) {
+                        phoneNames[i.toString()] = phoneName;
+                      }
+                    }
+                  }
+              print('Retrieved phone names: $phoneNames');
+              
+                  }
+                  
                   if (automationData.containsKey('ghl_accessToken')){
       ghl = snapshot.get("ghl_accessToken");
                 }    if (automationData.containsKey('ghl_refreshToken')){
@@ -242,7 +263,7 @@ Future<void> fetchContacts() async {
       final companyDocRef = FirebaseFirestore.instance.collection("companies").doc(companyId);
     final contactsSnapshot = await companyDocRef.collection("contacts")
         .orderBy('last_message.timestamp', descending: true)
-        .limit(20 * currentPage)
+        .limit(100 * currentPage)
         .get();
       var contacts = contactsSnapshot.docs.map((doc) => doc.data()).toList();
 
@@ -380,9 +401,35 @@ Future<void> fetchEmployeeNames() async {
   }
 }
 List<Map<String, dynamic>> filteredConversations() {
+  if (userPhone != null) {
+    print('\n--- Filtering Conversations ---');
+    print('Current userPhone: "$userPhone" (${userPhone.runtimeType})');
+    print('current conversations: ${conversations}');
+     conversations = conversations.where((conversation) {
+      // Check for both phoneIndexes array and single phoneIndex
+      var phoneIndexes = conversation['phoneIndexes'];
+      var singlePhoneIndex = conversation['phoneIndex'];
+      int? userPhoneInt = int.tryParse(userPhone!);
+      
+      // Debug prints
+      print('\nChecking conversation: ${conversation['chat_id']}');
+      print('phoneIndexes: $phoneIndexes');
+      print('singlePhoneIndex: $singlePhoneIndex');
+      print('userPhoneInt: $userPhoneInt');
+      
+      // Check if phoneIndexes array exists and includes userPhone
+      if (phoneIndexes != null && phoneIndexes is List) {
+        return phoneIndexes.contains(userPhoneInt);
+      }
+      
+      // Fallback to single phoneIndex comparison
+      return singlePhoneIndex?.toString() == userPhone;
+    }).toList();
+  }
   List<Map<String, dynamic>> pinnedChats = [];
   List<Map<String, dynamic>> otherChats = [];
   List<Map<String, dynamic>> groupChats = conversations.where((contact) => contact['chat_id'] != null && contact['chat_id'].contains('@g.us')).toList();
+   
     if (!selectedTags.contains('Snooze')) {
     conversations = conversations.where((conversation) {
       List<String> tags = List<String>.from(conversation['tags'] ?? []);
@@ -621,7 +668,7 @@ void _showAddTagDialog(Map<String, dynamic> conversation, ColorScheme colorSchem
                 },
               ),
               ElevatedButton(
-                child: Text('Add New Tag'),
+                child: Text('Add New Tag',style: TextStyle(color: colorScheme.onBackground),),
                
                 onPressed: () {
                   if (newTag.isNotEmpty && !allTags.contains(newTag)) {
@@ -634,7 +681,7 @@ void _showAddTagDialog(Map<String, dynamic> conversation, ColorScheme colorSchem
                 },
               ),
               ElevatedButton(
-                child: Text('Save'),
+                child: Text('Save',style: TextStyle(color: Colors.black),),
                 
                 onPressed: () {
                   List<String> updatedTags = [...selectedTags, ...selectedEmployees];
@@ -802,15 +849,84 @@ Future<void> markConversationAsRead(String chatId) async {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        company,
-                        textAlign: TextAlign.start,
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontFamily: 'SF',
-                          fontWeight: FontWeight.bold,
-                          color: colorScheme.onBackground,
-                        ),
+                                         Row(
+                        children: [
+                          Text(
+                            phoneNames[userPhone] ?? 'Select Phone',
+                            textAlign: TextAlign.start,
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontFamily: 'SF',
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.onBackground,
+                            ),
+                          ),
+                          IconButton(
+                            icon: Icon(
+                              Icons.arrow_drop_down,
+                              color: colorScheme.onBackground,
+                            ),
+                            onPressed: () {
+                              if(role == "1"){  
+                                  showDialog(
+                                context: context,
+                                builder: (BuildContext context) {
+                                  return AlertDialog(
+                                    backgroundColor: colorScheme.background,
+                                    title: Text('Select Phone',
+                                        style: TextStyle(color: colorScheme.onBackground)),
+                                    content: Container(
+                                      width: double.minPositive,
+                                      child: ListView.builder(
+                                        shrinkWrap: true,
+                                        itemCount: phoneNames.length,
+                                        itemBuilder: (context, index) {
+                                          String key = phoneNames.keys.elementAt(index);
+                                          return ListTile(
+                                            title: Text(
+                                              phoneNames[key]!,
+                                              style: TextStyle(color: colorScheme.onBackground),
+                                            ),
+                                            selected: key == userPhone,
+                                            onTap: () async {
+                                              // Update Firebase first
+                                              try {
+                                                await FirebaseFirestore.instance
+                                                    .collection("user")
+                                                    .doc(email)
+                                                    .update({
+                                                  'phone': key
+                                                });
+                                                
+                                                setState(() {
+                                                  userPhone = key;
+                                                });
+                                                
+                                                Navigator.pop(context);
+                                                fetchContacts(); // Refresh contacts with new phone filter
+                                                
+                                                // Show success message
+                                                Toast.show(context, 'success', 
+                                                  'Phone switched to ${phoneNames[key]}');
+                                                  
+                                              } catch (e) {
+                                                print('Error updating phone in Firebase: $e');
+                                                Toast.show(context, 'error', 
+                                                  'Failed to update phone. Please try again.');
+                                              }
+                                            },
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  );
+                                },
+                              );
+                              }
+                            
+                            },
+                          ),
+                        ],
                       ),
                       Row(
                         children: [
@@ -862,7 +978,7 @@ Future<void> markConversationAsRead(String chatId) async {
                                             Navigator.of(context).pop();
                                             Navigator.of(context).push(
                                               MaterialPageRoute(
-                                                builder: (context) => MessageScreen(chatId: chatId, messages: [], conversation: {}, whapi: whapiToken, name: phoneNumber, phone: phoneNumber,accessToken: ghl,location: ghl_location,userName:firstName),
+                                                builder: (context) => MessageScreen(chatId: chatId, messages: [], conversation: {}, whapi: whapiToken, name: phoneNumber, phone: phoneNumber,accessToken: ghl,location: ghl_location,userName:firstName,phoneIndex: int.parse(userPhone!)),
                                               ),
                                             );
                                           },
@@ -892,19 +1008,16 @@ Future<void> markConversationAsRead(String chatId) async {
                               child: Icon(Icons.refresh,size: 30,color: colorScheme.onBackground,),
                             ),
                           ),
-                           IconButton(
-                            icon: Icon(
-                            Icons.notifications,
-                              color: colorScheme.onBackground,
-                            ),
-                            onPressed: (){
-                              Navigator.of(context).push(
-                                            MaterialPageRoute(
-                                              builder: (context) => NotificationScreen(),
-                                            ),
-                                          );
-                            },
-                          ),
+                                       ShadButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) =>  NotificationScreen(),
+                ),
+              );
+            },
+            icon: const Icon(Icons.notifications),
+          ),
                           IconButton(
                             icon: Icon(
                               isDarkMode ? Icons.light_mode : Icons.dark_mode,
@@ -1006,7 +1119,7 @@ Future<void> markConversationAsRead(String chatId) async {
                          final number = (conversation['phone'] != null && conversation['phone'].contains('+'))
     ? conversation['phone'].split("+")[1]
     : conversation['phone'];
-                          final userName = (conversation['chat']?['name'] != null)?conversation['chat']['name'] :"+"+ number;
+                          final userName = (conversation['contactName'] != null)?conversation['contactName'] :"+"+ number;
                           final latestMessage = conversation['latestMessage'] ?? 'No message';
                      
                           final latestTimestamp = conversation['latestMessageTimestamp'] ?? DateTime.now();
@@ -1142,19 +1255,15 @@ Future<void> markConversationAsRead(String chatId) async {
                                                            if (conversation['pinned'])
                                                             Icon(CupertinoIcons.pin_fill, size: 16, color:colorScheme.onBackground),
                                                              if(unread != 0)
+                                                             
                                                            Container(
                                                              height: 15,
                                                              width: 15,
-                                                             decoration: BoxDecoration(
-                                                               borderRadius: BorderRadius.circular(100),
-                                                               color: Colors.redAccent
-                                                             ),
-                                                             child: Center(
-                                                               child: Text(
+                                                            child :  ShadBadge(backgroundColor: Colors.redAccent,
+                                                                text:  Text(
                                                                  unread.toString(),
                                                                  style: TextStyle(color: Colors.white, fontSize: 10),
-                                                               ),
-                                                             ),
+                                                               ),),
                                                            ),
                                                          ],
                                                        ),

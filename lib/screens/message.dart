@@ -125,6 +125,9 @@ List<dynamic> tags =[];
     bool isDarkMode = false;
 StreamSubscription<RemoteMessage>? _notificationSubscription;
   Map<String, dynamic>? replyToMessage;
+  List<Map<String, dynamic>> quickReplies = [];
+  bool showQuickReplies = false;
+  OverlayEntry? _overlayEntry;
 
   @override
   void initState() {
@@ -137,9 +140,18 @@ StreamSubscription<RemoteMessage>? _notificationSubscription;
     }
       _scrollController.addListener(_scrollListener);
     _messageController.addListener(() {
-     String value = _messageController.text;
+      String value = _messageController.text;
+                        
+      // Check for '/' trigger
+      if (value.startsWith('/')) {
+        _showQuickRepliesOverlay();
+      } else if (showQuickReplies && !value.contains('/')) {
+        _hideQuickRepliesOverlay();
+      }
+
+      // Your existing height calculation code
       List<String> lines = value.split('\n');
-      int newHeight = 50 + (lines.length - 1) *20;
+      int newHeight = 50 + (lines.length - 1) * 20;
       if (value.length > 29) {
         int additionalHeight = ((value.length - 1) ~/ 29) * 25;
         newHeight += additionalHeight;
@@ -148,6 +160,7 @@ StreamSubscription<RemoteMessage>? _notificationSubscription;
         height = newHeight.clamp(0, 200).toDouble();
       });
     });
+    fetchQuickReplies();
   }
 
   Future<void> loadDarkModePreference() async {
@@ -347,7 +360,7 @@ Future<void> sendImageMessage(String to, PlatformFile? imageFile, String caption
     var body = json.encode({
       'imageUrl': imageUrl,
       'caption': caption,
-      'phoneIndex': 0,
+      'phoneIndex': widget.phoneIndex,
       'userName': widget.userName,
     });
 
@@ -450,7 +463,7 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
 
   @override
   Widget build(BuildContext context) {
-     final colorScheme = isDarkMode
+    final colorScheme = isDarkMode
         ? ColorScheme.dark(
             primary: Color(0xFF101827),
             secondary: Colors.tealAccent,
@@ -466,7 +479,6 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
             onBackground: Color(0xFF2D3748),
           );
 
-
     return Theme(
        data: ThemeData(
         colorScheme: colorScheme,
@@ -474,6 +486,11 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
         appBarTheme: AppBarTheme(
           backgroundColor: colorScheme.background,
           foregroundColor: colorScheme.onBackground,
+        ),
+        textSelectionTheme: TextSelectionThemeData(
+          selectionColor: Colors.blue.withOpacity(0.5), // Change this to your desired color
+          cursorColor: Colors.blue, // Change this to your desired cursor color
+          selectionHandleColor: Colors.blue, // Change this to your desired handle color
         ),
       ),
       child: Scaffold(
@@ -1115,7 +1132,7 @@ Future<void> sendTextMessage(String to, String messageText) async {
     var body = json.encode({
       'message': messageText,
       'quotedMessageId': replyToMessage?['id'], // Add logic for reply if needed
-      'phoneIndex': 0,
+      'phoneIndex': widget.phoneIndex,
       'userName': widget.userName,
     });
 
@@ -1210,7 +1227,9 @@ Future<void> sendTextMessage(String to, String messageText) async {
                       ),
                       GestureDetector(
                         onTap: () {
-                      
+                         Clipboard.setData(ClipboardData(text: message));
+    Navigator.pop(context); // Close the modal
+    showToast('Message copied to clipboard');
                         
                         },
                         child: Container(
@@ -1521,5 +1540,141 @@ void _openPdfFullScreen(BuildContext context, String pdfUrl) async {
       ),
     ),
   ));
+}
+
+Future<void> fetchQuickReplies() async {
+  try {
+    // Get the current user's email
+    String? userEmail = FirebaseAuth.instance.currentUser?.email;
+    if (userEmail == null) return;
+
+    // Fetch company quick replies
+    var companySnapshot = await FirebaseFirestore.instance
+        .collection('companies')
+        .doc(widget.companyId)
+        .collection('quickReplies')
+        .orderBy('createdAt', descending: true)
+        .get();
+
+    // Fetch user's personal quick replies
+    var userSnapshot = await FirebaseFirestore.instance
+        .collection('user')
+        .doc(userEmail)
+        .collection('quickReplies')
+        .orderBy('createdAt', descending: true)
+        .get();
+
+    List<Map<String, dynamic>> replies = [
+      ...companySnapshot.docs.map((doc) => {
+            'id': doc.id,
+            'keyword': doc.data()['keyword'] ?? '',
+            'text': doc.data()['text'] ?? '',
+            'type': 'all',
+            'document': doc.data()['document'],
+            'image': doc.data()['image'],
+          }),
+      ...userSnapshot.docs.map((doc) => {
+            'id': doc.id,
+            'keyword': doc.data()['keyword'] ?? '',
+            'text': doc.data()['text'] ?? '',
+            'type': 'self',
+            'document': doc.data()['document'],
+            'image': doc.data()['image'],
+          }),
+    ];
+
+    setState(() {
+      quickReplies = replies;
+    });
+  } catch (e) {
+    print('Error fetching quick replies: $e');
+  }
+}
+
+void _showQuickRepliesOverlay() {
+  _hideQuickRepliesOverlay();
+
+  _overlayEntry = OverlayEntry(
+    builder: (context) => Positioned(
+      bottom: MediaQuery.of(context).viewInsets.bottom + 60,
+      left: 0,
+      right: 0,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          height: 200,
+          margin: EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: isDarkMode ? Color(0xFF1F2937) : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black26,
+                blurRadius: 10,
+              ),
+            ],
+          ),
+          child: ListView.builder(
+            itemCount: quickReplies.length,
+            itemBuilder: (context, index) {
+              final reply = quickReplies[index];
+              return ListTile(
+                title: Text(reply['keyword'] ?? ''),
+                subtitle: Text(reply['text'] ?? ''),
+                onTap: () => _handleQuickReplySelection(reply),
+              );
+            },
+          ),
+        ),
+      ),
+    ),
+  );
+
+  Overlay.of(context).insert(_overlayEntry!);
+  setState(() {
+    showQuickReplies = true;
+  });
+}
+
+void _hideQuickRepliesOverlay() {
+  _overlayEntry?.remove();
+  _overlayEntry = null;
+  setState(() {
+    showQuickReplies = false;
+  }); 
+}
+
+void _handleQuickReplySelection(Map<String, dynamic> reply) async {
+  if (reply['image'] != null) {
+    // Handle image quick reply
+    try {
+      // Download the image from the URL
+      final response = await http.get(Uri.parse(reply['image']));
+      if (response.statusCode == 200) {
+        // Create a temporary file
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/temp_image.jpg');
+        await file.writeAsBytes(response.bodyBytes);
+
+        // Set the downloaded file as pickedFile
+        setState(() {
+          pickedFile = PlatformFile(
+            name: 'temp_image.jpg',
+            path: file.path,
+            size: response.bodyBytes.length,
+            bytes: response.bodyBytes,
+          );
+        });
+      }
+    } catch (e) {
+      print('Error downloading image: $e');
+    }
+  }
+
+  setState(() {
+    _messageController.text = reply['text'] ?? '';
+  });
+
+  _hideQuickRepliesOverlay();
 }
 }

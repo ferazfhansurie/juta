@@ -9,7 +9,8 @@ import 'package:juta_app/screens/login.dart';
 import 'package:juta_app/screens/splash.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:juta_app/services/notification.dart';
+import 'package:shadcn_ui/shadcn_ui.dart';
+
 
 Future<void> main() async {
   debugPaintSizeEnabled = false;
@@ -41,35 +42,12 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoApp(
-      title: 'juta',
-      debugShowCheckedModeBanner: false,
-      localizationsDelegates: [
-        DefaultWidgetsLocalizations.delegate,
-        DefaultMaterialLocalizations.delegate,
-      ],
-      theme: const CupertinoThemeData(
-        brightness: Brightness.light,
-        scaffoldBackgroundColor: Color(0xFF111B21),
-        primaryColor: Colors.white,
-        textTheme: CupertinoTextThemeData(
-          navActionTextStyle: TextStyle(
-            fontFamily: 'SF',
-            fontSize: 16,
-            // Additional properties...
-          ),
-          navLargeTitleTextStyle: TextStyle(
-            fontFamily: 'SF',
-            fontSize: 34,
-            // Additional properties...
-          ),
-        ),
-      ),
-      initialRoute: '/',
-      routes: {
-        '/': (context) => const SplashScreen(),
-        '/home': (context) => Home(),
-        '/login': (context) => const LoginScreen(),
+    return ShadApp.material(
+      materialThemeBuilder: (context, theme) {
+        return theme.copyWith(
+          // Customize material theme if needed
+          appBarTheme: const AppBarTheme(toolbarHeight: 52),
+        );
       },
     );
   }

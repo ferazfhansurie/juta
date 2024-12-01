@@ -224,18 +224,62 @@ Future<bool> loadDarkModePreference() async {
 
  
 
-  Future<void> _login(BuildContext context) async {
-    final GlobalKey progressDialogKey = GlobalKey<State>();
+Future<void> _login(BuildContext context) async {
+  final GlobalKey progressDialogKey = GlobalKey<State>();
+  try {
+    // Basic validation
+    if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
+      throw 'Please enter both email and password';
+    }
+
     ProgressDialog.show(context, progressDialogKey);
-    String username = _usernameController.text;
-    final user = await _auth.signInWithEmailAndPassword(
-        email: username, password: _passwordController.text);
-  
-    ProgressDialog.unshow(context, progressDialogKey);
-    if (user != null) {
-      Navigator.of(context).push(CupertinoPageRoute(builder: (context) {
+    String username = _usernameController.text.trim(); // Trim whitespace
+    String password = _passwordController.text;
+
+    // Print for debugging (remove in production)
+    print('Attempting login with email: $username');
+    
+    final userCredential = await _auth.signInWithEmailAndPassword(
+        email: username, password: password);
+    
+    if (userCredential.user != null) {
+      ProgressDialog.unshow(context, progressDialogKey);
+      Navigator.of(context).pushReplacement(CupertinoPageRoute(builder: (context) {
         return const Home();
       }));
     }
+  } on FirebaseAuthException catch (e) {
+    ProgressDialog.unshow(context, progressDialogKey);
+    String errorMessage;
+    
+    switch (e.code) {
+      case 'user-not-found':
+        errorMessage = 'No user found with this email.';
+        break;
+      case 'wrong-password':
+        errorMessage = 'Wrong password provided.';
+        break;
+      case 'invalid-email':
+        errorMessage = 'Invalid email format.';
+        break;
+      default:
+        errorMessage = 'Error: ${e.message}';
+    }
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(errorMessage),
+        backgroundColor: Colors.red,
+      ),
+    );
+  } catch (e) {
+    ProgressDialog.unshow(context, progressDialogKey);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('An unexpected error occurred: $e'),
+        backgroundColor: Colors.red,
+      ),
+    );
   }
+}
 }
