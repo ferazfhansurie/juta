@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'package:juta_app/screens/contact_detail.dart';
+import 'package:juta_app/screens/video.dart';
 import 'package:juta_app/utils/toast.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
@@ -247,50 +248,8 @@ print("id"+widget.contactId!);
       print('Error loading more messages: $e');
     }
 }
-Future<void> _refreshMessages() async {
-  try {
-    List<Map<String, dynamic>> updatedMessages = [];
-   updatedMessages = await fetchMessagesForChat(widget.chatId!, widget.conversation);
-    setState(() {
-      widget.messages = updatedMessages;
-    });
-  } catch (e) {
-    // Handle error
-    print('Error in _refreshMessages: $e');
-  }
-}
-    Future<List<Map<String, dynamic>>> fetchMessagesForChat(String chatId,dynamic chat) async {
-        List<Map<String, dynamic>> messages =[];
-  try {
-    String url = 'https://gate.whapi.cloud/messages/list/$chatId';
-    // Optionally, include query parameters like count, offset, etc.
 
-    var response = await http.get(
-      Uri.parse(url),
-      headers: {
-        'Authorization': 'Bearer ${widget.whapi}', // Replace with your actual Whapi access token
-      },
-    );
- if (response.statusCode == 200) {
-  var data = json.decode(response.body);
   
-  // Ensure messages is treated as a List<Map<String, dynamic>>.
-  // We use .cast<Map<String, dynamic>>() to ensure the correct type.
-  List<Map<String, dynamic>> messages = (data['messages'] is List)
-      ? data['messages'].cast<Map<String, dynamic>>()
-      : [];
-  // Now 'messages' is guaranteed to be a List<Map<String, dynamic>>,
-  // which you can safely pass to another widget.
-return messages;
-} else {
-      print('Failed to fetch messages: ${response.body}');
-   return messages;
-    }
-  } catch (e) {
-    print('Error fetching messages for chat: $e');
-  return messages;
-  }
-}
 Future<dynamic> getContact(String number) async {
   // API endpoint
   var url = Uri.parse('https://services.leadconnectorhq.com/contacts/search/duplicate');
@@ -502,19 +461,17 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
       scrollDirection: Axis.horizontal,
       physics: NeverScrollableScrollPhysics(),
             child: Row(
-                mainAxisAlignment: MainAxisAlignment.start,
+           
           
               children: [
                 GestureDetector(
                     onTap: () {
                       Navigator.of(context).pop();
                     },
-                    child:  Icon(CupertinoIcons.chevron_back,size: 40,
+                    child:  Icon(CupertinoIcons.chevron_back,size: 35,
                         color: colorScheme.onBackground,)),
             
-                const SizedBox(
-                  width: 5,
-                ),
+               
                 if(true)//widget.conversation!['name'] != null)
                 GestureDetector(
                   onTap: (){
@@ -522,8 +479,8 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
                          
                   },
                   child: Container(
-                                             height: 30,
-                                             width: 30,
+                                             height: 35,
+                                             width: 35,
                                               decoration: BoxDecoration(
                                               color: Color(0xFF2D3748),
                                               borderRadius: BorderRadius.circular(100),
@@ -594,7 +551,7 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
                 scale: 0.7,
                     child: Switch(
                       
-                      activeColor: Color(0xFF019F7D),
+                      activeColor: CupertinoColors.systemBlue ,
                       
                       value: !stopBot,
                      onChanged: (value){
@@ -630,251 +587,289 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
                   child: ListView.builder(
                        controller: _scrollController, 
                     padding: const EdgeInsets.all(10),
-                    itemCount: widget.messages!.length,
+                    itemCount: widget.messages.length,
                     reverse: true, // To display messages from the bottom
                     itemBuilder: (context, index) {
-                      //_handleImageMessage(widget.messages![index]);
-                
-                 final message = widget.messages![index];
-                   if(message['chat_id'] != null){
-       final type = message['type'];
-      final isSent = message['from_me'];
-        DateTime parsedDateTime;
-      if (message['timestamp'] is int) {
-        parsedDateTime = DateTime.fromMillisecondsSinceEpoch(message['timestamp'] * 1000).toLocal();
-      } else if (message['timestamp'] is Timestamp) {
-        parsedDateTime = message['timestamp'].toDate().toLocal();
-      } else {
-        // Handle other cases or use a default value
-        parsedDateTime = DateTime.now().toLocal();
-      }
+                      final message = widget.messages[index];
+                      if(message['chat_id'] != null) {
+                        final type = message['type'];
+                        final isSent = message['from_me'];
+                        DateTime parsedDateTime;
+                        if (message['timestamp'] is int) {
+                          parsedDateTime = DateTime.fromMillisecondsSinceEpoch(message['timestamp'] * 1000).toLocal();
+                        } else if (message['timestamp'] is Timestamp) {
+                          parsedDateTime = message['timestamp'].toDate().toLocal();
+                        } else {
+                          parsedDateTime = DateTime.now().toLocal();
+                        }
 
-      String formattedTime = DateFormat('h:mm a').format(parsedDateTime); // Format for time
-      print(message); 
-                      if (type == 'text') {
-                          final messageText = message['text']['body'];
-                        return Draggable<Map<String, dynamic>>(
-                          // Data is the message map
-                          data: message,
-                          // Specify the axis as horizontal to limit dragging to left/right
-                          axis: Axis.horizontal,
-                          // The child is your existing message bubble
-                          child: Align(
+                        String formattedTime = DateFormat('h:mm a').format(parsedDateTime);
+
+                        if (type == 'document' && message['document'] != null && message['document']['link'] != null) {
+                          return Align(
                             alignment: isSent ? Alignment.centerRight : Alignment.centerLeft,
-                            child: _buildMessageBubble(isSent, messageText, [], formattedTime, colorScheme,message),
-                          ),
-                          // The feedback widget is what appears under the user's finger while dragging
-                          feedback: Material(
-                            color: Colors.transparent,
-                            child: Opacity(
-                              opacity: 0.7,
+                            child: _buildPdfMessageBubble(isSent, message['document']['link'], formattedTime, colorScheme),
+                          );
+                        } else if (type == 'document') {
+                          return Align(
+                            alignment: isSent ? Alignment.centerRight : Alignment.centerLeft,
+                            child: _buildMessageBubble(isSent, "Document unavailable", [], formattedTime, colorScheme, message),
+                          );
+                        } else if (type == 'text') {
+                          final messageText = message['text']['body'];
+                          return Draggable<Map<String, dynamic>>(
+                            // Data is the message map
+                            data: message,
+                            // Specify the axis as horizontal to limit dragging to left/right
+                            axis: Axis.horizontal,
+                            // The child is your existing message bubble
+                            child: Align(
+                              alignment: isSent ? Alignment.centerRight : Alignment.centerLeft,
                               child: _buildMessageBubble(isSent, messageText, [], formattedTime, colorScheme,message),
                             ),
-                          ),
-                          // onDragEnd is called when the user lifts their finger
-                          onDragEnd: (details) {
-                            if (details.offset.dx < -50 && isSent) {  // Dragged left
-                              setState(() {
-                                print(message);
-                                replyToMessage = message;
-                              });
-                            }else if (!isSent && details.offset.dx > 50) {  // Received message dragged right
-      setState(() {
-        replyToMessage = message;
-      });
-    }
-                          },
-                          // childWhenDragging is the widget that stays in place while dragging
-                          childWhenDragging: Opacity(
-                            opacity: 0.0,
-                            child: _buildMessageBubble(isSent, messageText, [], formattedTime, colorScheme,message),
-                          ),
-                        );
-                      } else if (type == 'document' &&  message['document']['link'] != null) {
-                           final documentLink = message['document']['link'];
-                         
-              return Align(
-                alignment: isSent ? Alignment.centerRight : Alignment.centerLeft,
-                child: _buildPdfMessageBubble(isSent, documentLink, formattedTime,colorScheme),
-              );
-                      }else if (type == 'image' && message['image']['data'] != null) {
-  return Padding(
-    padding: const EdgeInsets.all(4),
-    child: Container(
-      decoration: BoxDecoration(
-        color: isSent ? Color(0xFFDCF8C6) : const Color.fromARGB(255, 224, 224, 224),
-        borderRadius: BorderRadius.circular(8.0),
-      ),
-      margin: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(4),
-                child: Builder(
-                  builder: (context) {
-                    if (message['image'] != null && message['image']['data'] != null) {
-                      try {
-                        return GestureDetector(
-                          onTap: () => _openImageFullScreen(context, base64Decode(message['image']['data'])),
-                          child: Image.memory(
-                            base64Decode(message['image']['data']),
-                            height: 250,
-                            width: 250,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => _buildErrorWidget(context, isSent),
-                          ),
-                        );
-                      } catch (e) {
-                        print('Error decoding image: $e');
-                        return _buildErrorWidget(context, isSent);
-                      }
-                    } else if (message['image'] != null && message['image']['link'] != null) {
-                      return GestureDetector(
-                        onTap: () => _openImageFullScreen(context, null, message['image']['link']),
-                        child: Image.network(
-                          message['image']['link'],
-                          height: 250,
-                          width: 250,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(child: CircularProgressIndicator());
-                          },
-                          errorBuilder: (context, error, stackTrace) => _buildErrorWidget(context, isSent),
-                        ),
-                      );
-                    } else {
-                      return _buildErrorWidget(context, isSent);
-                    }
-                  },
-                ),
-              ),
-              if (message['caption'] != null && message['caption'].isNotEmpty)
-                Padding(
-                  padding: EdgeInsets.only(top: 5, left: 8, right: 8, bottom: 20),
-                  child: Text(message['caption']),
-                ),
-            ],
-          ),
-          Positioned(
-            bottom: 5,
-            right: 15,
-            child: Text(
-              formattedTime,
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}else if (type == 'image' && message['image']['url'] != null) {
-  return Padding(
-    padding: const EdgeInsets.all(4),
-    child: Container(
-      decoration: BoxDecoration(
-        color: isSent ? Color(0xFFDCF8C6) : const Color.fromARGB(255, 224, 224, 224),
-        borderRadius: BorderRadius.circular(8.0),
-      ),
-      margin: const EdgeInsets.symmetric(horizontal: 8.0),
-      child: Stack(
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(4),
-                child: Builder(
-                  builder: (context) {
-                    if (message['image'] != null && message['image']['data'] != null) {
-                      try {
-                        return GestureDetector(
-                          onTap: () => _openImageFullScreen(context, base64Decode(message['image']['data'])),
-                          child: Image.memory(
-                            base64Decode(message['image']['data']),
-                            height: 250,
-                            width: 250,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => _buildErrorWidget(context, isSent),
-                          ),
-                        );
-                      } catch (e) {
-                        print('Error decoding image: $e');
-                        return _buildErrorWidget(context, isSent);
-                      }
-                    } else if (message['image'] != null && message['image']['link'] != null) {
-                      return GestureDetector(
-                        onTap: () => _openImageFullScreen(context, null, message['image']['link']),
-                        child: Image.network(
-                          message['image']['link'],
-                          height: 250,
-                          width: 250,
-                          fit: BoxFit.cover,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Center(child: CircularProgressIndicator());
-                          },
-                          errorBuilder: (context, error, stackTrace) => _buildErrorWidget(context, isSent),
-                        ),
-                      );
-                    } else {
-                      return _buildErrorWidget(context, isSent);
-                    }
-                  },
-                ),
-              ),
-              if (message['caption'] != null && message['caption'].isNotEmpty)
-                Padding(
-                  padding: EdgeInsets.only(top: 5, left: 8, right: 8, bottom: 20),
-                  child: Text(message['caption']),
-                ),
-            ],
-          ),
-          Positioned(
-            bottom: 5,
-            right: 15,
-            child: Text(
-              formattedTime,
-              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}else if (type == 'poll') {
-                  
-                 final messageText = message['poll']['title'];
-                        return Align(
+                            // The feedback widget is what appears under the user's finger while dragging
+                            feedback: Material(
+                              color: Colors.transparent,
+                              child: Opacity(
+                                opacity: 0.7,
+                                child: _buildMessageBubble(isSent, messageText, [], formattedTime, colorScheme,message),
+                              ),
+                            ),
+                            // onDragEnd is called when the user lifts their finger
+                            onDragEnd: (details) {
+                              if (details.offset.dx < -50 && isSent) {  // Dragged left
+                                setState(() {
+                                  print(message);
+                                  replyToMessage = message;
+                                });
+                              }else if (!isSent && details.offset.dx > 50) {  // Received message dragged right
+                                setState(() {
+                                  replyToMessage = message;
+                                });
+                              }
+                            },
+                            // childWhenDragging is the widget that stays in place while dragging
+                            childWhenDragging: Opacity(
+                              opacity: 0.0,
+                              child: _buildMessageBubble(isSent, messageText, [], formattedTime, colorScheme,message),
+                            ),
+                          );
+                        } else if (type == 'image' && message['image']['data'] != null) {
+                          return Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: isSent ? CupertinoColors.systemBlue  : const Color.fromARGB(255, 224, 224, 224),
+                                borderRadius: BorderRadius.circular(8.0),
+                              ),
+                              margin: const EdgeInsets.symmetric(horizontal: 8.0),
+                              child: Stack(
+                                children: [
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.all(4),
+                                        child: Builder(
+                                          builder: (context) {
+                                            if (message['image'] != null && message['image']['data'] != null) {
+                                              try {
+                                                return GestureDetector(
+                                                  onTap: () => _openImageFullScreen(context, base64Decode(message['image']['data'])),
+                                                  child: Image.memory(
+                                                    base64Decode(message['image']['data']),
+                                                    height: 250,
+                                                    width: 250,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (context, error, stackTrace) => _buildErrorWidget(context, isSent),
+                                                  ),
+                                                );
+                                              } catch (e) {
+                                                print('Error decoding image: $e');
+                                                return _buildErrorWidget(context, isSent);
+                                              }
+                                            } else if (message['image'] != null && message['image']['link'] != null) {
+                                              return GestureDetector(
+                                                onTap: () => _openImageFullScreen(context, null, message['image']['link']),
+                                                child: Image.network(
+                                                  message['image']['link'],
+                                                  height: 250,
+                                                  width: 250,
+                                                  fit: BoxFit.cover,
+                                                  loadingBuilder: (context, child, loadingProgress) {
+                                                    if (loadingProgress == null) return child;
+                                                    return Center(child: CircularProgressIndicator());
+                                                  },
+                                                  errorBuilder: (context, error, stackTrace) => _buildErrorWidget(context, isSent),
+                                                ),
+                                              );
+                                            } else {
+                                              return _buildErrorWidget(context, isSent);
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                      if (message['caption'] != null && message['caption'].isNotEmpty)
+                                        Padding(
+                                          padding: EdgeInsets.only(top: 5, left: 8, right: 8, bottom: 20),
+                                          child: Text(message['caption']),
+                                        ),
+                                    ],
+                                  ),
+                                  Positioned(
+                                    bottom: 5,
+                                    right: 15,
+                                    child: Text(
+                                      formattedTime,
+                                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        } else if (type == 'document' &&  message['document'] != null) {
+                          return GestureDetector(
+                            onTap: () => _openDocument(context, message['document']),
+                            child: Container(
+                              padding: EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: Colors.grey[200],
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(Icons.description, size: 40),
+                                  SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          message['document']['filename'] ?? 'Document',
+                                          style: TextStyle(fontWeight: FontWeight.bold),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        if (message['document']['fileSize'] != null)
+                                          Text(
+                                            '${(message['document']['fileSize'] / 1024).toStringAsFixed(1)} KB',
+                                            style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        } else if (type == 'image' && message['image']['url'] != null) {
+                          return Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: isSent ? CupertinoColors.systemBlue  : const Color.fromARGB(255, 224, 224, 224),
+                                borderRadius: BorderRadius.circular(8.0),
+                              ),
+                              margin: const EdgeInsets.symmetric(horizontal: 8.0),
+                              child: Stack(
+                                children: [
+                                  Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.all(4),
+                                        child: Builder(
+                                          builder: (context) {
+                                            if (message['image'] != null && message['image']['data'] != null) {
+                                              try {
+                                                return GestureDetector(
+                                                  onTap: () => _openImageFullScreen(context, base64Decode(message['image']['data'])),
+                                                  child: Image.memory(
+                                                    base64Decode(message['image']['data']),
+                                                    height: 250,
+                                                    width: 250,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (context, error, stackTrace) => _buildErrorWidget(context, isSent),
+                                                  ),
+                                                );
+                                              } catch (e) {
+                                                print('Error decoding image: $e');
+                                                return _buildErrorWidget(context, isSent);
+                                              }
+                                            } else if (message['image'] != null && message['image']['link'] != null) {
+                                              return GestureDetector(
+                                                onTap: () => _openImageFullScreen(context, null, message['image']['link']),
+                                                child: Image.network(
+                                                  message['image']['link'],
+                                                  height: 250,
+                                                  width: 250,
+                                                  fit: BoxFit.cover,
+                                                  loadingBuilder: (context, child, loadingProgress) {
+                                                    if (loadingProgress == null) return child;
+                                                    return Center(child: CircularProgressIndicator());
+                                                  },
+                                                  errorBuilder: (context, error, stackTrace) => _buildErrorWidget(context, isSent),
+                                                ),
+                                              );
+                                            } else {
+                                              return _buildErrorWidget(context, isSent);
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                      if (message['caption'] != null && message['caption'].isNotEmpty)
+                                        Padding(
+                                          padding: EdgeInsets.only(top: 5, left: 8, right: 8, bottom: 20),
+                                          child: Text(message['caption']),
+                                        ),
+                                    ],
+                                  ),
+                                  Positioned(
+                                    bottom: 5,
+                                    right: 15,
+                                    child: Text(
+                                      formattedTime,
+                                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        } else if (type == 'video' && message['video'] != null && message['video']['link'] != null) {
+                          return VideoMessageBubble(
+                            videoUrl: message['video']['link'],
+                            caption: message['video']['caption'],
+                            isSent: isSent, // Pass the isSent value
+                            time: formattedTime, // Pass the formatted time
+                          );
+                        } else if (type == 'poll') {
+                          final messageText = message['poll']['title'];
+                          return Align(
                             alignment: isSent
                                 ? Alignment.centerRight
                                 : Alignment.centerLeft,
                             child: _buildMessageBubble(
-                                isSent, messageText, message['poll']['options'],formattedTime,colorScheme,message ));
+                              isSent, messageText, message['poll']['options'],formattedTime,colorScheme,message
+                            ),
+                          );
+                        } else {
+                          final type = 'text';
+                          final messageText = message['body']??message['text']['body'];
+                          final isSent = (message['direction'] != 'inbound');
+                          DateTime parsedDateTime = DateTime.parse(message['dateAdded']).toLocal();
+                          String formattedTime = DateFormat('h:mm a').format(parsedDateTime);
+                          return Align(
+                            alignment: isSent
+                                ? Alignment.centerRight
+                                : Alignment.centerLeft,
+                            child: _buildMessageBubble(isSent, messageText, [],formattedTime,colorScheme,message),
+                          );
+                        }
                       }
-                      
                       return const SizedBox
                           .shrink(); // Hide if type is not recognized
-                   }else{
-                       //lesgo
-                     final type = 'text';
-            
-                       final messageText = message['body']??message['text']['body'];
-      final isSent = (message['direction'] != 'inbound');
-          DateTime parsedDateTime = DateTime.parse(message['dateAdded']).toLocal();
-          String formattedTime = DateFormat('h:mm a').format(parsedDateTime); 
-           return Align(
-                          alignment: isSent
-                              ? Alignment.centerRight
-                              : Alignment.centerLeft,
-                          child: _buildMessageBubble(isSent, messageText, [],formattedTime,colorScheme,message),
-                        );
-                   }
-         
-        
                     },
                   ),
                 ),
@@ -988,6 +983,11 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
            
             child: Row(
               children:[
+              IconButton(
+  icon: const Icon(Icons.quickreply),
+  onPressed: () => _showQuickRepliesOverlay(), // or just _showQuickRepliesOverlay
+  color: colorScheme.onBackground,
+),
                 IconButton(
                   icon: const Icon(Icons.image),
                   onPressed: _showImageDialog,
@@ -1122,6 +1122,69 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
       ),
     );
   }
+
+
+void _openDocument(BuildContext context, Map<String, dynamic> document) async {
+  try {
+    final String? base64Data = document['data'];
+    final String filename = document['filename'] ?? 'document.pdf';
+    
+    if (base64Data == null) {
+      throw 'Document data not found';
+    }
+
+    // Convert base64 to bytes
+    final bytes = base64Decode(base64Data.trim());
+    
+    // Get temporary directory
+    final directory = await getApplicationDocumentsDirectory();
+    final filePath = '${directory.path}/$filename';
+    
+    // Write to temporary file
+    final file = File(filePath);
+    await file.writeAsBytes(bytes);
+    
+    // Navigate to PDF viewer screen
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => Scaffold(
+          appBar: AppBar(
+            title: Text(filename),
+          ),
+          body: PDFView(
+            filePath: filePath,
+            enableSwipe: true,
+            swipeHorizontal: false,
+            autoSpacing: true,
+            pageFling: true,
+            onError: (error) {
+              print('Error: $error');
+            },
+            onPageError: (page, error) {
+              print('Page error: $error');
+            },
+          ),
+        ),
+      ),
+    );
+    
+  } catch (e) {
+    showCupertinoDialog(
+      context: context,
+      builder: (BuildContext context) => CupertinoAlertDialog(
+        title: Text('Error'),
+        content: Text('Error opening document: $e'),
+        actions: <CupertinoDialogAction>[
+          CupertinoDialogAction(
+            child: Text('OK'),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ],
+      ),
+    );
+  }
+}
 Future<void> sendTextMessage(String to, String messageText) async {
   setState(() {
     _messageController.clear();  
@@ -1338,7 +1401,7 @@ Widget _buildMessageBubble(
               padding: EdgeInsets.symmetric(horizontal: 5),
               margin: const EdgeInsets.symmetric(horizontal: 8.0),
               decoration: BoxDecoration(
-                color: isSent ? const Color(0xFFDCF8C6) : colorScheme.onBackground,
+                color: isSent ? CupertinoColors.systemBlue : colorScheme.onBackground,
                 borderRadius: BorderRadius.circular(8.0),
               ),
               child: Stack(
@@ -1409,8 +1472,8 @@ Widget _buildMessageBubble(
                         Text(
                           message,
                           style:  TextStyle(
-                            fontSize: 14.0,
-                            color: isSent ? Color.fromARGB(255, 0, 0, 0) :colorScheme.background,
+                            fontSize: 15.0,
+                            color: isSent ? Color.fromARGB(255, 255, 255, 255) :colorScheme.background,
                             fontWeight: FontWeight.w500,
                             fontFamily: 'SF',
                           ),
@@ -1425,7 +1488,7 @@ Widget _buildMessageBubble(
                       time,
                       style:  TextStyle(
                         fontSize: 9.0,
-                        color:  isSent ? Color.fromARGB(255, 0, 0, 0) :colorScheme.background,
+                        color:  isSent ? Color.fromARGB(255, 255, 255, 255) :colorScheme.background,
                         fontFamily: 'SF',
                       ),
                     ),
@@ -1595,38 +1658,56 @@ void _showQuickRepliesOverlay() {
   _hideQuickRepliesOverlay();
 
   _overlayEntry = OverlayEntry(
-    builder: (context) => Positioned(
-      bottom: MediaQuery.of(context).viewInsets.bottom + 60,
-      left: 0,
-      right: 0,
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          height: 200,
-          margin: EdgeInsets.symmetric(horizontal: 8),
-          decoration: BoxDecoration(
-            color: isDarkMode ? Color(0xFF1F2937) : Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black26,
-                blurRadius: 10,
-              ),
-            ],
-          ),
-          child: ListView.builder(
-            itemCount: quickReplies.length,
-            itemBuilder: (context, index) {
-              final reply = quickReplies[index];
-              return ListTile(
-                title: Text(reply['keyword'] ?? ''),
-                subtitle: Text(reply['text'] ?? ''),
-                onTap: () => _handleQuickReplySelection(reply),
-              );
-            },
+    builder: (context) => Stack(
+      children: [
+        // Add a transparent GestureDetector that covers the whole screen
+        Positioned.fill(
+          child: GestureDetector(
+            onTap: _hideQuickRepliesOverlay,
+            behavior: HitTestBehavior.opaque,
+            child: Container(
+              color: Colors.transparent,
+            ),
           ),
         ),
-      ),
+        // Your existing overlay content
+        Positioned(
+          bottom: MediaQuery.of(context).viewInsets.bottom + 60,
+          left: 0,
+          right: 0,
+          child: GestureDetector(
+            onTap: () {}, // Prevent taps on the overlay from closing it
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                height: 200,
+                margin: EdgeInsets.symmetric(horizontal: 8),
+                decoration: BoxDecoration(
+                  color: isDarkMode ? Color(0xFF1F2937) : Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: ListView.builder(
+                  itemCount: quickReplies.length,
+                  itemBuilder: (context, index) {
+                    final reply = quickReplies[index];
+                    return ListTile(
+                      title: Text(reply['keyword'] ?? ''),
+                      subtitle: Text(reply['text'] ?? ''),
+                      onTap: () => _handleQuickReplySelection(reply),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     ),
   );
 

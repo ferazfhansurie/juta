@@ -6,6 +6,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
   import 'package:juta_app/services/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/conversations.dart';
 
 class CustomTabBar extends StatefulWidget {
@@ -73,12 +74,23 @@ class _HomeState extends State<Home> {
   String email = '';
   String firstName = '';
   String company = '';
+    bool isDarkMode = false; // Add this line to track dark mode state
+  Future<bool> loadDarkModePreference() async {
+  final prefs = await SharedPreferences.getInstance();
+
+  return prefs.getBool('isDarkMode') ?? false; // Default to false if not set
+  
+}
   @override
   void initState() {
     // TODO: implement initState
     super.initState();
     email = user!.email!;
-      
+      loadDarkModePreference().then((value) {
+    setState(() {
+      isDarkMode = value;
+    });
+  });
   }
 
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
@@ -140,13 +152,12 @@ class _HomeState extends State<Home> {
 
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       key: _scaffoldKey,
-      drawer:(kIsWeb )? null : Drawer(
+      drawer: (kIsWeb) ? null : Drawer(
         width: 225,
         child: Container(
-          color: Colors.black,
+          color: isDarkMode ? Colors.black : Colors.white,
           child: Column(
             children: [
               Expanded(
@@ -157,14 +168,18 @@ class _HomeState extends State<Home> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(CupertinoIcons.person_alt_circle, size: 50),
+                          Icon(
+                            CupertinoIcons.person_alt_circle, 
+                            size: 50,
+                            color: isDarkMode ? Colors.white : Colors.black,
+                          ),
                           Text(
                             firstName,
                             maxLines: 1,
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: isDarkMode ? Colors.white : Colors.black,
                             ),
                           ),
                           Text(
@@ -179,17 +194,17 @@ class _HomeState extends State<Home> {
                         ],
                       ),
                     ),
-                    SizedBox(
-                      height: 10,
-                    ),
-                    Divider(color: Colors.white),
+                    SizedBox(height: 10),
+                    Divider(color: isDarkMode ? Colors.white : Colors.black),
                     ListTile(
-                      title: Text('About Us',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          )),
+                      title: Text(
+                        'About Us',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: isDarkMode ? Colors.white : Colors.black,
+                        )
+                      ),
                       onTap: () {
                         // Add your functionality for this sidebar item
                       },
@@ -227,7 +242,7 @@ class _HomeState extends State<Home> {
           ),
         ),
       ),
-      backgroundColor: Colors.black,
+      backgroundColor: isDarkMode ? Colors.black : Colors.white,
       body:IndexedStack(
         index: currentIndex,
         children: [

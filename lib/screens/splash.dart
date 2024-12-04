@@ -1,4 +1,3 @@
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -17,28 +16,29 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-  loadDarkModePreference().then((value) {
-    setState(() {
-      isDarkMode = value;
+    loadDarkModePreference().then((value) {
+      setState(() {
+        isDarkMode = value;
+      });
     });
-  });
     _initFirebaseMessaging();
     Future.delayed(const Duration(milliseconds: 500), () {
       _autoLogin(context);
     });
   }
-Future<bool> loadDarkModePreference() async {
-  final prefs = await SharedPreferences.getInstance();
-  return prefs.getBool('isDarkMode') ?? false; // Default to false if not set
-}
+
+  Future<bool> loadDarkModePreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('isDarkMode') ?? false; // Default to false if not set
+  }
+
   @override
   Widget build(BuildContext context) {
-     
-  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
-    statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
-  ));
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
+    ));
     final colorScheme = isDarkMode
         ? ColorScheme.dark(
             primary: Color(0xFF101827),
@@ -66,20 +66,19 @@ Future<bool> loadDarkModePreference() async {
         // ... other theme properties ...
       ),
       child: Scaffold(
-       
         body: Container(
-             color: colorScheme.background,
+          color: colorScheme.background,
           width: MediaQuery.of(context).size.width,
           height: MediaQuery.of(context).size.height,
           padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 40),
           child: Center(
-            child:  Container(
-                        child: Padding(
-                          padding: const EdgeInsets.all(8.0),
-                          child: Image.asset('assets/images/logo2.png',
-                              fit: BoxFit.contain, width: 75),
-                        ),
-                      ),
+            child: Container(
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Image.asset('assets/images/logo_new.png',
+                    fit: BoxFit.contain, width: 75),
+              ),
+            ),
           ),
         ),
       ),
@@ -107,11 +106,10 @@ Future<bool> loadDarkModePreference() async {
   }
 
   Future<void> _autoLogin(context) async {
-       print("home");
-      Navigator.pushReplacementNamed(context, '/home');
- User? user = _auth.currentUser;
+    print("home");
+    Navigator.pushReplacementNamed(context, '/home');
+    User? user = _auth.currentUser;
     if (user != null) {
-   
     } else {
       print("login");
       Navigator.pushReplacementNamed(context, '/login');

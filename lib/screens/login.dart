@@ -170,35 +170,33 @@ Future<bool> loadDarkModePreference() async {
                           ),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal:15.0),
-                            child: Container(
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                color: Color(0xFF2D3748),
-                                  borderRadius: BorderRadius.circular(8)),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: GestureDetector(
-                                  onTap: () {
-                                    _login(context);
-                                  },
-                                  child: Text(
-                                    'Log in',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                        color: Colors.white,
-                                               fontFamily: 'SF',
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold),
-                                  ),
-                                ),
+                            child:  SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            onPressed: () => _login(context),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: CupertinoColors.systemBlue,
+                              foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
                               ),
                             ),
+                            child: Text(
+                              'Sign in',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
                           ),
       Padding(
         padding: const EdgeInsets.only(top:150),
         child: Center(
       child: Text(
-                                          'Version 2.0',
+                                          'Version 2.9',
                                           textAlign: TextAlign.start,
                                           style: TextStyle(
                                               fontFamily: 'SF',

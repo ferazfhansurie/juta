@@ -9,13 +9,12 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:juta_app/models/conversations.dart';
 import 'package:juta_app/screens/message.dart';
 import 'package:juta_app/screens/notification.dart';
 import 'package:juta_app/utils/progress_dialog.dart';
 import 'package:juta_app/utils/toast.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:shadcn_ui/shadcn_ui.dart';
+
 
 class Conversations extends StatefulWidget {
   const Conversations({super.key});
@@ -428,7 +427,6 @@ List<Map<String, dynamic>> filteredConversations() {
   }
   List<Map<String, dynamic>> pinnedChats = [];
   List<Map<String, dynamic>> otherChats = [];
-  List<Map<String, dynamic>> groupChats = conversations.where((contact) => contact['chat_id'] != null && contact['chat_id'].contains('@g.us')).toList();
    
     if (!selectedTags.contains('Snooze')) {
     conversations = conversations.where((conversation) {
@@ -586,110 +584,109 @@ void _showAddTagDialog(Map<String, dynamic> conversation, ColorScheme colorSchem
     builder: (BuildContext context) {
       return StatefulBuilder(
         builder: (context, setState) {
-          return AlertDialog(
-            backgroundColor: colorScheme.background,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: Text('Manage Tags', style: TextStyle(color: colorScheme.onBackground, fontWeight: FontWeight.bold)),
-            content: Container(
-              width: double.maxFinite,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Expanded(
-                    child: ListView(
-                      children: [
-                        Text('Tags', style: TextStyle(color: colorScheme.onBackground, fontWeight: FontWeight.bold)),
-                        ...allTags.map((tag) => Card(
-                          color: colorScheme.surface,
-                          child: CheckboxListTile(
-                            title: Text(tag, style: TextStyle(color: colorScheme.onSurface)),
-                            value: selectedTags.contains(tag),
-                            activeColor: colorScheme.primary,
-                            checkColor: colorScheme.onPrimary,
-                            onChanged: (bool? value) {
-                              setState(() {
-                                if (value == true) {
-                                  selectedTags.add(tag);
-                                } else {
-                                  selectedTags.remove(tag);
-                                }
-                              });
-                            },
-                          ),
-                        )).toList(),
-                        SizedBox(height: 16),
-                        Text('Assign to Employee', style: TextStyle(color: colorScheme.onBackground, fontWeight: FontWeight.bold)),
-                        ...employeeNames.map((employee) => Card(
-                          color: colorScheme.surface,
-                          child: CheckboxListTile(
-                            title: Text(employee, style: TextStyle(color: colorScheme.onSurface)),
-                            value: selectedEmployees.contains(employee),
-                            activeColor: colorScheme.primary,
-                            checkColor: colorScheme.onPrimary,
-                            onChanged: (bool? value) {
-                              setState(() {
-                                if (value == true) {
-                                  selectedEmployees.add(employee);
-                                } else {
-                                  selectedEmployees.remove(employee);
-                                }
-                              });
-                            },
-                          ),
-                        )).toList(),
-                      ],
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  TextField(
-                    style: TextStyle(color: colorScheme.onBackground),
-                    decoration: InputDecoration(
-                      hintText: "Enter new tag",
-                      hintStyle: TextStyle(color: colorScheme.onBackground.withOpacity(0.6)),
-                      filled: true,
-                      fillColor: colorScheme.surface,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: BorderSide.none,
+          return CupertinoTheme(
+            data: CupertinoThemeData(
+              brightness: isDarkMode ? Brightness.dark : Brightness.light,
+              primaryColor: CupertinoColors.systemBlue,
+            ),
+            child: CupertinoAlertDialog(
+              title: Text('Manage Tags', 
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: colorScheme.onBackground,
+                )
+              ),
+              content: Container(
+                height: MediaQuery.of(context).size.height * 0.5,
+                width: MediaQuery.of(context).size.width * 0.9,
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: CupertinoScrollbar(
+                        child: ListView(
+                          children: [
+                            _buildSectionHeader('Tags', colorScheme),
+                            ...allTags.map((tag) => _buildTagItem(
+                              tag: tag,
+                              isSelected: selectedTags.contains(tag),
+                              onChanged: (value) {
+                                setState(() {
+                                  if (value == true) {
+                                    selectedTags.add(tag);
+                                  } else {
+                                    selectedTags.remove(tag);
+                                  }
+                                });
+                              },
+                              colorScheme: colorScheme,
+                            )).toList(),
+                            
+                            _buildSectionHeader('Assign to Employee', colorScheme),
+                            ...employeeNames.map((employee) => _buildTagItem(
+                              tag: employee,
+                              isSelected: selectedEmployees.contains(employee),
+                              onChanged: (value) {
+                                setState(() {
+                                  if (value == true) {
+                                    selectedEmployees.add(employee);
+                                  } else {
+                                    selectedEmployees.remove(employee);
+                                  }
+                                });
+                              },
+                              colorScheme: colorScheme,
+                            )).toList(),
+                          ],
+                        ),
                       ),
                     ),
-                    onChanged: (value) {
-                      newTag = value;
-                    },
-                  ),
-                ],
+                    SizedBox(height: 8),
+                    CupertinoTextField(
+                      placeholder: "Enter new tag",
+                      placeholderStyle: TextStyle(
+                        color: colorScheme.onBackground.withOpacity(0.6),
+                      ),
+                      style: TextStyle(color: colorScheme.onBackground),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surface,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      onChanged: (value) {
+                        newTag = value;
+                      },
+                    ),
+                  ],
+                ),
               ),
+              actions: [
+                CupertinoDialogAction(
+                  child: Text('Cancel'),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+                CupertinoDialogAction(
+                  child: Text('Add New Tag'),
+                  onPressed: () {
+                    if (newTag.isNotEmpty && !allTags.contains(newTag)) {
+                      setState(() {
+                        allTags.add(newTag);
+                        selectedTags.add(newTag);
+                        newTag = '';
+                      });
+                    }
+                  },
+                ),
+                CupertinoDialogAction(
+                  isDefaultAction: true,
+                  child: Text('Save'),
+                  onPressed: () {
+                    List<String> updatedTags = [...selectedTags, ...selectedEmployees];
+                    _updateConversationTags(conversation, updatedTags);
+                    Navigator.of(context).pop();
+                  },
+                ),
+              ],
             ),
-            actions: <Widget>[
-              TextButton(
-                child: Text('Cancel', style: TextStyle(color: colorScheme.primary)),
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-              ),
-              ElevatedButton(
-                child: Text('Add New Tag',style: TextStyle(color: colorScheme.onBackground),),
-               
-                onPressed: () {
-                  if (newTag.isNotEmpty && !allTags.contains(newTag)) {
-                    setState(() {
-                      allTags.add(newTag);
-                      selectedTags.add(newTag);
-                      newTag = '';
-                    });
-                  }
-                },
-              ),
-              ElevatedButton(
-                child: Text('Save',style: TextStyle(color: Colors.black),),
-                
-                onPressed: () {
-                  List<String> updatedTags = [...selectedTags, ...selectedEmployees];
-                  _updateConversationTags(conversation, updatedTags);
-                  Navigator.of(context).pop();
-                },
-              ),
-            ],
           );
         },
       );
@@ -797,26 +794,26 @@ Future<void> markConversationAsRead(String chatId) async {
   Widget build(BuildContext context) {
       
   
-  SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
-    statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
-  ));
-    final colorScheme = isDarkMode
-        ? ColorScheme.dark(
-            primary: Color(0xFF101827),
-            secondary: Colors.tealAccent,
-            surface: Color(0xFF1F2937),
-            background: Color(0xFF101827),
-            onBackground: Colors.white,
-          )
-        : ColorScheme.light(
-            primary: Color(0xFF2D3748),
-            secondary: Color(0xFF2D3748),
-            surface: Colors.white,
-            background: Colors.white,
-            onBackground: Color(0xFF2D3748),
-          );
+    SystemChrome.setSystemUIOverlayStyle(SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: isDarkMode ? Brightness.light : Brightness.dark,
+      statusBarBrightness: isDarkMode ? Brightness.dark : Brightness.light,
+    ));
+  final colorScheme = isDarkMode
+      ? ColorScheme.dark(
+          primary: CupertinoColors.systemBackground.darkColor,
+          secondary: CupertinoColors.secondarySystemBackground.darkColor,
+          surface: CupertinoColors.secondarySystemBackground.darkColor,
+          background: CupertinoColors.systemBackground.darkColor,
+          onBackground: CupertinoColors.label.darkColor,
+        )
+      : ColorScheme.light(
+          primary: CupertinoColors.systemBackground,
+          secondary: CupertinoColors.secondarySystemBackground,
+          surface: CupertinoColors.systemBackground,
+          background: CupertinoColors.systemBackground,
+          onBackground: CupertinoColors.label,
+        );
 
     return Theme(
       data: ThemeData(
@@ -833,41 +830,42 @@ Future<void> markConversationAsRead(String chatId) async {
         body: SingleChildScrollView(
           physics: NeverScrollableScrollPhysics(),
           child: Container(
-            padding: EdgeInsets.only(
+          padding: EdgeInsets.only(
               top: MediaQuery.of(context).padding.top,
               
               left: 20,
             ),
             height: MediaQuery.of(context).size.height,
             color: colorScheme.background,
-            child: Column(
+          child: Column(
               mainAxisAlignment: MainAxisAlignment.start,
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+            children: [
                 Padding(
                   padding: EdgeInsets.all(8.0),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                                         Row(
-                        children: [
-                          Text(
-                            phoneNames[userPhone] ?? 'Select Phone',
-                            textAlign: TextAlign.start,
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontFamily: 'SF',
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.onBackground,
-                            ),
+               CupertinoButton(
+                    padding: EdgeInsets.zero,
+                    child: Row(
+                      children: [
+                        Text(
+                          phoneNames[userPhone] ?? 'Select Phone',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: colorScheme.onBackground,
                           ),
-                          IconButton(
-                            icon: Icon(
-                              Icons.arrow_drop_down,
-                              color: colorScheme.onBackground,
-                            ),
-                            onPressed: () {
-                              if(role == "1"){  
+                        ),
+                        Icon(
+                          CupertinoIcons.chevron_down,
+                          color: CupertinoColors.systemBlue ,
+                        ),
+                      ],
+                    ),
+                    onPressed: () {
+                      
                                   showDialog(
                                 context: context,
                                 builder: (BuildContext context) {
@@ -922,67 +920,100 @@ Future<void> markConversationAsRead(String chatId) async {
                                   );
                                 },
                               );
-                              }
+                           
                             
-                            },
-                          ),
-                        ],
-                      ),
-                      Row(
-                        children: [
+                    },
+                  ),
+                   Spacer(),
+                  Row(
+                    children: [
                           GestureDetector(
                             onTap: () async {
                               TextEditingController numberController = TextEditingController();
                               await showDialog(
                                 context: context,
                                 builder: (BuildContext context) {
-                                  return Container(
-                                     width: MediaQuery.of(context).size.width * 0.9, // Set width to 90% of screen width
-                                    child: AlertDialog(
-                                        backgroundColor: colorScheme.background,
-                                      title: Text('Enter Number',style: TextStyle(color: colorScheme.onBackground)),
-                                      content: Row(
+                                  return CupertinoTheme(
+                                    data: CupertinoThemeData(
+                                      brightness: isDarkMode ? Brightness.dark : Brightness.light,
+                                      primaryColor: CupertinoColors.systemBlue,
+                                    ),
+                                    child: CupertinoAlertDialog(
+                                      title: Text(
+                                        'Enter Number',
+                                        style: TextStyle(
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.bold,
+                                          color: colorScheme.onBackground,
+                                        ),
+                                      ),
+                                      content: Column(
+                                        mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Text('+60',style: TextStyle(color: colorScheme.onBackground)),
-                                          SizedBox(width: 10,),
+                                          SizedBox(height: 8),
                                           Container(
-                                            width: 200,
-                                            child: TextField(
-                                              controller: numberController,
-                                              keyboardType: TextInputType.phone,
-                                              style: TextStyle(color: colorScheme.onBackground),
-                                              decoration: InputDecoration(hintText: 'Enter phone number',hintStyle: TextStyle(color: colorScheme.onBackground)),
+                                            padding: EdgeInsets.symmetric(horizontal: 8),
+                                            decoration: BoxDecoration(
+                                              color: colorScheme.surface,
+                                              borderRadius: BorderRadius.circular(8),
+                                              border: Border.all(
+                                                color: colorScheme.onBackground.withOpacity(0.1),
+                                              ),
+                                            ),
+                                            child: Row(
+                                              children: [
+                                                Text(
+                                                  '+60',
+                                                  style: TextStyle(color: colorScheme.onBackground),
+                                                ),
+                                                SizedBox(width: 8),
+                                                Expanded(
+                                                  child: CupertinoTextField(
+                                                    controller: numberController,
+                                                    keyboardType: TextInputType.phone,
+                                                    placeholder: 'Enter phone number',
+                                                    style: TextStyle(color: colorScheme.onBackground),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.transparent,
+                                                      border: Border.all(color: Colors.transparent),
+                                                    ),
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ],
                                       ),
-                                      actions: <Widget>[
-                                        TextButton(
-                                          onPressed: () {
-                                            Navigator.of(context).pop();
-                                          },
-                                          child: Text('Cancel',style: TextStyle(color: colorScheme.onBackground),),
+                                      actions: [
+                                        CupertinoDialogAction(
+                                          child: Text('Cancel'),
+                                          onPressed: () => Navigator.of(context).pop(),
                                         ),
-                                        ElevatedButton(
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: colorScheme.background,
-                                           
-                                          ),
+                                        CupertinoDialogAction(
+                                          isDefaultAction: true,
+                                          child: Text('Message'),
                                           onPressed: () {
-                                            String phoneNumber = "+60"+numberController.text.trim();
-                                            print(phoneNumber);
-                                            String chat = phoneNumber+"@s.whatsapp.net";
-                                              print(chat);
+                                            String phoneNumber = "+60${numberController.text.trim()}";
+                                            String chat = "$phoneNumber@s.whatsapp.net";
                                             String chatId = chat.split('+')[1];
-                                            print(chatId);
                                             Navigator.of(context).pop();
                                             Navigator.of(context).push(
-                                              MaterialPageRoute(
-                                                builder: (context) => MessageScreen(chatId: chatId, messages: [], conversation: {}, whapi: whapiToken, name: phoneNumber, phone: phoneNumber,accessToken: ghl,location: ghl_location,userName:firstName,phoneIndex: int.parse(userPhone!)),
+                                              CupertinoPageRoute(
+                                                builder: (context) => MessageScreen(
+                                                  chatId: chatId,
+                                                  messages: [],
+                                                  conversation: {},
+                                                  whapi: whapiToken,
+                                                  name: phoneNumber,
+                                                  phone: phoneNumber,
+                                                  accessToken: ghl,
+                                                  location: ghl_location,
+                                                  userName: firstName,
+                                                  phoneIndex: int.parse(userPhone!),
+                                                ),
                                               ),
                                             );
                                           },
-                                          child: Text('Message',style: TextStyle(color: colorScheme.onBackground),),
                                         ),
                                       ],
                                     ),
@@ -992,7 +1023,7 @@ Future<void> markConversationAsRead(String chatId) async {
                             },
                             child: Padding(
                               padding: const EdgeInsets.all(8.0),
-                              child: Icon(Icons.add, size: 30, color: colorScheme.onBackground),
+                              child: Icon(CupertinoIcons.plus, size: 30, color: colorScheme.onBackground),
                             ),
                           ),
                           GestureDetector(
@@ -1007,99 +1038,77 @@ Future<void> markConversationAsRead(String chatId) async {
                               padding: const EdgeInsets.all(8.0),
                               child: Icon(Icons.refresh,size: 30,color: colorScheme.onBackground,),
                             ),
-                          ),
-                                       ShadButton(
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) =>  NotificationScreen(),
-                ),
-              );
-            },
-            icon: const Icon(Icons.notifications),
-          ),
-                          IconButton(
+                      ),
+                      IconButton(
                             icon: Icon(
                               isDarkMode ? Icons.light_mode : Icons.dark_mode,
                               color: colorScheme.onBackground,
                             ),
-                            onPressed: toggleDarkMode,
-                          ),
-                        ],
+                        onPressed: toggleDarkMode,
                       ),
                     ],
                   ),
+                ],
+              ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(2),
-                  child: Container(
-                    height: 30,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: colorScheme.onBackground),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: TextField(
-                      style: TextStyle(
-                        color: colorScheme.onBackground,
-                        fontFamily: 'SF',
-                      ),
-                      cursorColor: colorScheme.onBackground,
-                      controller: searchController,
-                      onChanged: onSearchTextChanged,
-                      decoration: InputDecoration(
-                        border: InputBorder.none,
-                        focusColor: colorScheme.onBackground,
-                        hoverColor: colorScheme.onBackground,
-                        hintText: 'Search',
-                        hintStyle: TextStyle(
-                          color: colorScheme.onBackground.withOpacity(0.6),
-                          fontFamily: 'SF',
-                          fontSize: 13,
-                        ),
-                        prefixIcon: Icon(
-                          Icons.search,
-                          size: 20,
-                          color: colorScheme.onBackground,
-                        ),
-                      ),
-                    ),
-                  ),
+                 Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Container(
+                 decoration: BoxDecoration(
+      borderRadius: BorderRadius.circular(12),
+      boxShadow: [
+        BoxShadow(
+          color: colorScheme.onBackground.withOpacity(0.05),
+          blurRadius: 8,
+          offset: Offset(0, 2),
+        ),
+      ],
+    ),
+                child: CupertinoSearchTextField(
+                  controller: searchController,
+                  onChanged: onSearchTextChanged,
+                  style: TextStyle(color: colorScheme.onBackground),
+                  placeholder: 'Search conversations...',
                 ),
-                Container(
-                  height: 30,
-                  padding: EdgeInsets.only(top:5),
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: availableTags.length,
-                    itemBuilder: (context, index) {
-                      String tag = availableTags[index];
-                      bool isSelected = selectedTags.contains(tag);
-                      return GestureDetector(
-                        onTap: () => toggleTagSelection(tag),
-                        child: Container(
-                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          margin: EdgeInsets.only(right: 15),
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.blueGrey : Colors.grey[200],
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            tag,
-                            style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.black,
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
+              ),
+            ),
+           Container(
+              height: 30,
+              margin: EdgeInsets.symmetric(vertical: 8),
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                itemCount: availableTags.length,
+                itemBuilder: (context, index) {
+                  String tag = availableTags[index];
+                  bool isSelected = selectedTags.contains(tag);
+                  return Padding(
+                    padding: EdgeInsets.only(right: 8),
+                    child: CupertinoButton(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      color: isSelected 
+                        ? CupertinoColors.systemBlue 
+                        : colorScheme.secondary,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Text(
+                        tag,
+                        style: TextStyle(
+                          color: isSelected 
+                            ? CupertinoColors.white 
+                            : colorScheme.onBackground,
+                          fontSize: 14,
                         ),
-                      );
-                    },
-                  ),
-),
+                      ),
+                      onPressed: () => toggleTagSelection(tag),
+                    ),
+                  );
+                },
+              ),
+            ),
 
 
                 Container(
-                height: MediaQuery.of(context).size.height *79/100,
+                height: MediaQuery.of(context).size.height *74/100,
                 child: RefreshIndicator(
              
                   onRefresh: _handleRefresh,
@@ -1109,20 +1118,20 @@ Future<void> markConversationAsRead(String chatId) async {
                        color: colorScheme.onBackground
                     ),
                   )
-                : ListView.builder(
-                        controller: _scrollController,
-                         padding: EdgeInsets.only(bottom: 80),
-                        itemCount: filteredConversations().length,
-                        itemBuilder: (context, index) {
-                          final conversation = filteredConversations()[index];
+                      : ListView.builder(
+                          controller: _scrollController,
+                          padding: EdgeInsets.only(bottom: 80),
+                          itemCount: filteredConversations().length,
+                          itemBuilder: (context, index) {
+                            final conversation = filteredConversations()[index];
                           final pic = (conversation['profilePicUrl']!= null||conversation['profilePicUrl']!='')?conversation['profilePicUrl']:null;
                          final number = (conversation['phone'] != null && conversation['phone'].contains('+'))
-    ? conversation['phone'].split("+")[1]
-    : conversation['phone'];
+                                ? conversation['phone'].split("+")[1]
+                                : conversation['phone'];
                           final userName = (conversation['contactName'] != null)?conversation['contactName'] :"+"+ number;
-                          final latestMessage = conversation['latestMessage'] ?? 'No message';
+                            final latestMessage = conversation['latestMessage'] ?? 'No message';
                      
-                          final latestTimestamp = conversation['latestMessageTimestamp'] ?? DateTime.now();
+                            final latestTimestamp = conversation['latestMessageTimestamp'] ?? DateTime.now();
                           var unread = (conversation['unreadCount'] != null)?conversation['unreadCount']:0;
                           var tags = (conversation['tags'] != null)?conversation['tags']:[];
                           final now = DateTime.now();
@@ -1146,171 +1155,202 @@ Future<void> markConversationAsRead(String chatId) async {
   int phoneIndex = (conversation['phoneIndex'] != null)?conversation['phoneIndex']:0;
                           final numberOnly = (conversation['chat_id'] != null)?(!conversation['chat_id']?.contains('@g'))?number ?? '':'Group':"";
                           return GestureDetector(
-                           onLongPress: role != "2" ? () => _showAddTagDialog(conversation, colorScheme) : null,
-                                  onTap: () async {
-                                       ProgressDialog.show(context, progressDialogKey);
+                                onLongPress: () => _showAddTagDialog(conversation, colorScheme) ,
+                                onTap: () async {
+                                  ProgressDialog.show(context, progressDialogKey);
   print(numberOnly);
-                                       if (conversation['unreadCount'] != 0) {
+                                  if (conversation['unreadCount'] != 0) {
     await markConversationAsRead("+"+numberOnly);
-  }
+                                  }
                                 print(conversation);
                              
  fetchMessagesForChat(conversation['chat_id'], conversation, userName, numberOnly,pic,conversation['phone'],tags,phoneIndex);
-                                  },
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Column(
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.start,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Container(
-                                         height: 50,
-                                         width: 50,
-                                          decoration: BoxDecoration(
-                                          color: Color(0xFF2D3748),
-                                          borderRadius: BorderRadius.circular(100),
-                                        ),
-                                        child: Center(
-    child: (conversation['profilePicUrl'] == null || conversation['profilePicUrl'].isEmpty)
-      ? Icon(CupertinoIcons.person_fill, size: 45, color: Colors.white)
-      : ClipOval(
-          child: Image.network(
-            conversation['profilePicUrl'],
-            fit: BoxFit.cover,
-            width: 50,
-            height: 50,
-            errorBuilder: (context, error, stackTrace) {
-              return Icon(CupertinoIcons.person_fill, size: 45, color: Colors.white);
-            },
-          ),
+                                },
+                                child: Container(
+                                  decoration: BoxDecoration(
+      color: colorScheme.surface,
+      borderRadius: BorderRadius.circular(12),
+      boxShadow: [
+        BoxShadow(
+          color: colorScheme.onBackground.withOpacity(0.05),
+          blurRadius: 8,
+          offset: Offset(0, 2),
         ),
-  ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Column(
-                                          mainAxisAlignment: MainAxisAlignment.start,
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            const SizedBox(height: 5),
-                                            Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                Container(
-                                                  width: 180,
-                                                  child: Text(
-                                                    userName ?? "Webchat",
-                                                    maxLines: 1,
-                                                    style:  TextStyle(
-                                                      color:  colorScheme.onBackground,
-                                                     fontFamily: 'SF',
-                                                      fontWeight: FontWeight.w700,
-                                                      fontSize: 16,
+      ],
+    ),
+                                  child: Padding(
+                                                                padding: const EdgeInsets.all(8.0),
+                                                                child: Column(
+                                      children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.start,
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Container(
+                                           height: 50,
+                                          width: 50,
+                                          decoration: BoxDecoration(
+                                            color: Color(0xFF2D3748),
+                                            borderRadius: BorderRadius.circular(100),
+                                            boxShadow: [
+      BoxShadow(
+        color: colorScheme.onBackground.withOpacity(0.1),
+        blurRadius: 6,
+        offset: Offset(0, 2),
+      ),
+    ],
+                                          ),
+                                          child: Center(
+                                      child: (conversation['profilePicUrl'] == null || conversation['profilePicUrl'].isEmpty)
+                                        ? Icon(CupertinoIcons.person_fill, size: 45, color: Colors.white)
+                                        : ClipOval(
+                                                  child: Image.network(
+                                              conversation['profilePicUrl'],
+                                                    fit: BoxFit.cover,
+                                              width: 50,
+                                              height: 50,
+                                              errorBuilder: (context, error, stackTrace) {
+                                                return Icon(CupertinoIcons.person_fill, size: 45, color: Colors.white);
+                                              },
+                                            ),
+                                          ),
+                                    ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.start,
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              const SizedBox(height: 5),
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Container(
+                                                    width: 180,
+                                                    child: Text(
+                                                      userName ?? "Webchat",
+                                                      maxLines: 1,
+                                                      style:  TextStyle(
+                                                        color:  colorScheme.onBackground,
+                                                       fontFamily: 'SF',
+                                                        fontWeight: FontWeight.w700,
+                                                        fontSize: 16,
+                                                      ),
                                                     ),
                                                   ),
-                                                ),
-                                                Row(
-                                                  children: [
-                                                    Text(
-                                                     //updatedAtText,
-                                                     formattedDate,
-                                                      style:  TextStyle(
-                                                        color:(unread != 0)?Colors.red :colorScheme.onBackground,
-                                                         fontFamily: 'SF',
-                                                      fontSize: 10
-                                                      ),
-                                                    ),
-                                                  
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
-                                            Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Container(
-                                                  height: 25,
-                                                  child: Row(
-                                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                  Row(
                                                     children: [
-                                                      Container(
-                                                        width: 220,
-                                                        child: Text(
-                                                          latestMessage ?? "",
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow.ellipsis,
-                                                          style:  TextStyle(
-                                                            color:  colorScheme.onBackground,
-                                                               fontFamily: 'SF',
-                                                               fontSize: 12,
-                                                            fontWeight: FontWeight.w400,
-                                                          ),
+                                                      Text(
+                                                       //updatedAtText,
+                                                       formattedDate,
+                                                        style:  TextStyle(
+                                                          color:(unread != 0)?Colors.red :colorScheme.onBackground,
+                                                           fontFamily: 'SF',
+                                                        fontSize: 10
                                                         ),
                                                       ),
-                                                   
-                                                       Row(
-                                                         children: [
-                                                           if (conversation['pinned'])
-                                                            Icon(CupertinoIcons.pin_fill, size: 16, color:colorScheme.onBackground),
-                                                             if(unread != 0)
-                                                             
-                                                           Container(
-                                                             height: 15,
-                                                             width: 15,
-                                                            child :  ShadBadge(backgroundColor: Colors.redAccent,
-                                                                text:  Text(
-                                                                 unread.toString(),
-                                                                 style: TextStyle(color: Colors.white, fontSize: 10),
-                                                               ),),
-                                                           ),
-                                                         ],
-                                                       ),
-                                                
-                                                   
+                                                    
                                                     ],
                                                   ),
-                                                ),
-                                                    if (tags.isNotEmpty)
-                                                  Wrap(
-                                                    spacing: 4.0,
-                                                    runSpacing: 4.0,
-                                                    children: tags.map<Widget>((tag) {
-                                                      return Container(
-                                                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                                        decoration: BoxDecoration(
-                                                          color: Colors.blueGrey,
-                                                          borderRadius: BorderRadius.circular(4),
-                                                        ),
-                                                        child: Text(
-                                                          tag,
-                                                          style: TextStyle(
-                                                            color: Colors.white,
-                                                            fontSize: 12,
+                                                ],
+                                              ),
+                                              Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Container(
+                                                    height: 25,
+                                                    child: Row(
+                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                      children: [
+                                                        Container(
+                                                          width: 220,
+                                                          child: Text(
+                                                            latestMessage ?? "",
+                                                            maxLines: 1,
+                                                            overflow: TextOverflow.ellipsis,
+                                                            style:  TextStyle(
+                                                              color:  colorScheme.onBackground,
+                                                                 fontFamily: 'SF',
+                                                                 fontSize: 12,
+                                                              fontWeight: FontWeight.w400,
+                                                            ),
                                                           ),
                                                         ),
-                                                      );
-                                                    }).toList(),
+                                                     
+                                                         Row(
+                                                           children: [
+                                                             if (conversation['pinned'])
+                                                              Icon(CupertinoIcons.pin_fill, size: 16, color:colorScheme.onBackground),
+                                                                 if(unread != 0)
+                                                             Container(
+                                                               height: 15,
+                                                               width: 15,
+                                                               decoration: BoxDecoration(
+                                                                 borderRadius: BorderRadius.circular(100),
+                                                                 color: Colors.redAccent
+                                                               ),
+                                                               child: Center(
+                                                                 child: Text(
+                                                                   unread.toString(),
+                                                                   style: TextStyle(color: Colors.white, fontSize: 10),
+                                                                 ),
+                                                               ),
+                                                             ),
+                                                           ],
+                                                         ),
+                                                  
+                                                     
+                                                      ],
+                                                    ),
                                                   ),
-                                              ],
-                                            ),
-                                         
-                                                  SizedBox(height: 5,),
-                                              const Divider(
-                                              height: 1,
-                                           color: Color.fromARGB(255, 153, 155, 158),
-                                              thickness: 1,
-                                            ),
-                                          ],
+                                                      if (tags.isNotEmpty)
+                                                    Wrap(
+                                                      spacing: 4.0,
+                                                      runSpacing: 4.0,
+                                                      children: tags.map<Widget>((tag) {
+                                                        return Container(
+                                                          padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                             boxShadow: [
+      BoxShadow(
+        color: CupertinoColors.systemBlue.withOpacity(0.2),
+        blurRadius: 4,
+        offset: Offset(0, 1),
+      ),
+    ],
+                                                            color: CupertinoColors.systemBlue ,
+                                                            borderRadius: BorderRadius.circular(4),
+                                                          ),
+                                                          child: Text(
+                                                            tag,
+                                                            style: TextStyle(
+                                                              color: Colors.white,
+                                                              fontSize: 12,
+                                                            ),
+                                                          ),
+                                                        );
+                                                      }).toList(),
+                                                    ),
+                                                ],
+                                              ),
+                                           
+                                                    SizedBox(height: 5,),
+                                                const Divider(
+                                                height: 1,
+                                             color: Color.fromARGB(255, 153, 155, 158),
+                                                thickness: 1,
+                                              ),
+                                            ],
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                               
-                                ],
-                              ),
-                            ),
+                                      ],
+                                    ),
+                                                                 
+                                  ],
+                                                                ),
+                                                              ),
+                                ),
                           );
                         },
                       ),
@@ -1339,29 +1379,26 @@ print(v2);
           .limit(100)  // Adjust the limit as needed
           .get();
 
-      messages = messagesSnapshot.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
+      messages = messagesSnapshot.docs
+          .map((doc) => doc.data() as Map<String, dynamic>)
+          .where((message) {
+            // Filter out unwanted message types
+            String type = message['type'] ?? '';
+            bool validType = type != 'action' && 
+                           type != 'e2e_notification' && 
+                           type != 'notification_template';
+
+            // Check phone index conditions
+            bool validPhoneIndex = userPhone == null || 
+                              
+                                 message['phoneIndex'] == null ||
+                                 message['phoneIndex'] == int.parse(userPhone!);
+
+            return validType && validPhoneIndex;
+          })
+          .toList();
       print(messages[0]);
-    } else {
-      // Fetch messages from Whapi API
-      String url = 'https://gate.whapi.cloud/messages/list/$chatId';
-      var response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $whapiToken',
-        },
-      );
-
-      if (response.statusCode == 200) {
-        var data = json.decode(response.body);
-        messages = (data['messages'] is List)
-            ? data['messages'].cast<Map<String, dynamic>>()
-            : [];
-      } else {
-        print('Failed to fetch messages: ${response.body}');
-        return;
-      }
-    }
-
+    } 
     ProgressDialog.hide(progressDialogKey);
 
     Navigator.of(context)
@@ -1426,5 +1463,59 @@ print(response);
     print('Response body: ${response.body}');
     return null;
   }
+}
+Widget _buildSectionHeader(String title, ColorScheme colorScheme) {
+  return Padding(
+    padding: EdgeInsets.symmetric(vertical: 8),
+    child: Text(
+      title,
+      style: TextStyle(
+        color: colorScheme.onBackground,
+        fontSize: 16,
+        fontWeight: FontWeight.bold,
+      ),
+    ),
+  );
+}
+
+Widget _buildTagItem({
+  required String tag,
+  required bool isSelected,
+  required Function(bool?) onChanged,
+  required ColorScheme colorScheme,
+}) {
+  return Container(
+    margin: EdgeInsets.symmetric(vertical: 4),
+    decoration: BoxDecoration(
+      color: colorScheme.surface,
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(
+        color: isSelected ? CupertinoColors.systemBlue : colorScheme.onBackground.withOpacity(0.1),
+        width: 1,
+      ),
+    ),
+    child: CupertinoButton(
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      onPressed: () => onChanged(!isSelected),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            tag,
+            style: TextStyle(
+              color: colorScheme.onBackground,
+              fontSize: 16,
+            ),
+          ),
+          if (isSelected)
+            Icon(
+              CupertinoIcons.check_mark,
+              color: CupertinoColors.systemBlue,
+              size: 20,
+            ),
+        ],
+      ),
+    ),
+  );
 }
 }
