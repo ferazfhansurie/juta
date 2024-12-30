@@ -88,8 +88,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(alert: true,badge: true,sound: true,);
   await setupFlutterNotifications();
   // Your added code for handling messages while the app is in the background
-  print('Handling a background message ${message.messageId}');
-  print(' message ${message.toMap()}');
+    print(' message ${message.toMap()}');
   if (message.notification != null) {
     if (message.notification != null) {
       FirebaseMessaging.onMessage.listen((RemoteMessage message) async {

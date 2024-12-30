@@ -254,24 +254,19 @@ final String apiUrl = 'https://rest.gohighlevel.com/v1/pipelines/${widget.pipeli
       },
       body: jsonEncode(userData),
     );
-print(response.body);
     if (response.statusCode == 200) {
-      print('Contact added successfully: ${response.body}');
-      // You can parse the response here if needed.
+            // You can parse the response here if needed.
       nameController.clear();
       phoneNumberController.clear();
       
       Toast.show(context, "success", "Contact Added");
     } else {
-      print('Failed to add contact: ${response.statusCode}');
-      print('Response body: ${response.body}');
-    }
+                }
       // Optionally, you can show a confirmation dialog or navigate to another screen.
     } else {
       // Handle case where one or both fields are empty.
       Toast.show(context, "danger", "Both cannot be empty");
-      print("Both fields are required");
-    }
+          }
 }
 
   @override

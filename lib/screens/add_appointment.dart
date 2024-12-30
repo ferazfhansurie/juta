@@ -47,7 +47,6 @@ Future<void> bookAppointment(String calendarId, String timezone, String slot, St
       'calendarNotes':nameController.text
     }),
   );
-print(response.body);
   if (response.statusCode == 200) {
   Navigator.pop(context);
   } else {
@@ -191,8 +190,7 @@ Future<Map<String, List<String>>> fetchAvailableSlots(String calendarId, int sta
       showTitleActions: true,
       minTime: DateTime(2024, 1, 1),
       onChanged: (date2) {
-        print('change $date');
-        setState(() {
+                setState(() {
           date = formatDate(date2);;
         });
       }, 

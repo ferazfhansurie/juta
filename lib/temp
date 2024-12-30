@@ -115,8 +115,7 @@ class _BotpressApiDemoState extends State<BotpressApiDemo> {
             final id = conversation['id'];
             final channel = conversation['channel'];
             final number = conversation['tags']['whatsapp:userPhone'];
-            print(conversation['tags']);
-            final latestMessage =
+                        final latestMessage =
                 conversation['tags']['whatsapp:latestMessage'];
 
             return ListTile(
@@ -165,8 +164,7 @@ class _MessageScreenState extends State<MessageScreen> {
   @override
   void initState() {
     super.initState();
-    print(widget.messages);
-  }
+      }
 
   Future<List<Map<String, dynamic>>> listMessages(String conversationId) async {
     String url = '$baseUrl/v1/chat/messages';
@@ -230,8 +228,7 @@ class _MessageScreenState extends State<MessageScreen> {
       },
       body: json.encode(requestBody),
     );
-    print(response.body);
-    if (response.statusCode == 200) {
+        if (response.statusCode == 200) {
       return json.decode(response.body);
     } else {
       return null;
@@ -260,13 +257,11 @@ class _MessageScreenState extends State<MessageScreen> {
               tags: tags,
               text: messageText)
           .then((createdMessage) async {
-        print('Created Text Message: $createdMessage');
-
+        
         // Refresh the message list after sending a message
         await _refreshMessages();
       }).catchError((e) {
-        print('Error sending message: $e');
-      });
+              });
       _messageController.clear();
     }
   }

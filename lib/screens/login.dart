@@ -196,7 +196,7 @@ Future<bool> loadDarkModePreference() async {
         padding: const EdgeInsets.only(top:150),
         child: Center(
       child: Text(
-                                          'Version 2.9',
+                                          'Version 2.13',
                                           textAlign: TextAlign.start,
                                           style: TextStyle(
                                               fontFamily: 'SF',

@@ -135,10 +135,9 @@ StreamSubscription<RemoteMessage>? _notificationSubscription;
     super.initState();
      loadDarkModePreference();
     listenNotification();
-    print(tags);
-    if(widget.tags!.contains('stop bot')){
-      stopBot = true;
-    }
+       if (widget.tags != null && widget.tags!.contains('stop bot')) {
+  stopBot = true;
+}
       _scrollController.addListener(_scrollListener);
     _messageController.addListener(() {
       String value = _messageController.text;
@@ -181,8 +180,7 @@ Future<void> listenNotification() async {
     _notificationSubscription = FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
       try {
         List<Map<String, dynamic>> messages = [];
-        print('Notification received: ${message.notification?.title}');
-
+        
         // Fetch messages from Firestore
         QuerySnapshot messagesSnapshot = await FirebaseFirestore.instance
             .collection('companies')
@@ -195,8 +193,7 @@ Future<void> listenNotification() async {
             .get();
 
         messages = messagesSnapshot.docs.map((doc) => doc.data() as Map<String, dynamic>).toList();
-        print(messages);
-
+        
         // Update the state if the widget is still mounted
         if (mounted) {
           setState(() {
@@ -204,7 +201,7 @@ Future<void> listenNotification() async {
           });
         }
       } catch (e) {
-        print('Error fetching messages: $e'); // Handle any errors
+         // Handle any errors
       }
     });
   }
@@ -224,7 +221,6 @@ void showToast(String message) {
   try {
       List<Map<String, dynamic>> newMessages = [];
       int oldestTimestamp = widget.messages.last['timestamp'];
-print("id"+widget.contactId!);
         // Fetch more messages from Firebase
         QuerySnapshot messagesSnapshot = await FirebaseFirestore.instance
             .collection('companies')
@@ -243,10 +239,8 @@ print("id"+widget.contactId!);
         widget.messages.addAll(newMessages);
       });
 
-      print('Loaded ${newMessages.length} more messages');
-    } catch (e) {
-      print('Error loading more messages: $e');
-    }
+          } catch (e) {
+          }
 }
 
   
@@ -269,21 +263,17 @@ Future<dynamic> getContact(String number) async {
 
   // Send GET request
   var response = await http.get(url.replace(queryParameters: params), headers: headers);
-print(response);
   // Handle response
   if (response.statusCode == 200) {
     // Success
     var data = jsonDecode(response.body);
-    print(data);
-    setState(() {
+        setState(() {
       tags = (data['contact'] != null)?data['contact']['tags']:[];
     });
     return data['contact'];
   } else {
     // Error
-    print('Failed to get contact. Status code: ${response.statusCode}');
-    print('Response body: ${response.body}');
-    return null;
+            return null;
   }
 }
    void _showImageDialog() async {
@@ -291,7 +281,8 @@ print(response);
     if (result != null) {
       setState(() {
         pickedFile = result.files.first;
-        if (pickedFile!.extension?.toLowerCase() == 'mp4') {
+      if (pickedFile!.extension?.toLowerCase() == 'mp4' || pickedFile!.extension?.toLowerCase() == 'mov') {
+
           _controller?.dispose();
           _controller = VideoPlayerController.file(File(pickedFile!.path!))
             ..initialize().then((_) {
@@ -307,15 +298,60 @@ print(response);
 
 Future<void> sendImageMessage(String to, PlatformFile? imageFile, String caption) async {
   if (imageFile == null || imageFile.path == null) {
-    print('Error: No image file selected');
     return;
   }
+  
+  String messageType = pickedFile!.extension?.toLowerCase() == 'mov' ? 'video' : 'image';
+  print(messageType);
+  
+  setState(() {
+    pickedFile = null;
+    _messageController.clear();
+  });
 
   try {
     // Upload the image to Firebase Storage and get the URL
     String imageUrl = await uploadImageToFirebaseStorage(imageFile);
 
-    String url = 'https://mighty-dane-newly.ngrok-free.app/api/v2/messages/image/${widget.companyId}/${widget.chatId}';
+    // Fetch the current user
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      print("User not authenticated");
+      return;
+    }
+
+    // Fetch user document from Firestore
+    DocumentSnapshot userSnapshot = await FirebaseFirestore.instance
+        .collection('user')
+        .doc(user.email)
+        .get();
+
+    if (!userSnapshot.exists) {
+      print('No such user document!');
+      return;
+    }
+
+    // Extract companyId from user data
+    Map<String, dynamic> userData = userSnapshot.data() as Map<String, dynamic>;
+    String companyId = userData['companyId'];
+
+    // Fetch company document from Firestore
+    DocumentSnapshot companySnapshot = await FirebaseFirestore.instance
+        .collection('companies')
+        .doc(companyId)
+        .get();
+
+    if (!companySnapshot.exists) {
+      print('No such company document!');
+      return;
+    }
+
+    // Extract apiUrl from company data
+    Map<String, dynamic> companyData = companySnapshot.data() as Map<String, dynamic>;
+    String baseUrl = companyData['apiUrl'] ?? 'https://mighty-dane-newly.ngrok-free.app';
+
+    // Construct the request URL
+    String url = '$baseUrl/api/v2/messages/image/${widget.companyId}/${widget.chatId}';
     var body = json.encode({
       'imageUrl': imageUrl,
       'caption': caption,
@@ -330,18 +366,17 @@ Future<void> sendImageMessage(String to, PlatformFile? imageFile, String caption
       },
       body: body,
     );
-  print(response.body);
+
     if (response.statusCode == 200) {
-      print('Image message sent successfully');
       final response2 = await http.get(Uri.parse(imageUrl));
-      
-  String base64Image = base64Encode(response2.bodyBytes);
+      String base64Image = base64Encode(response2.bodyBytes);
+
       // Create a new message object
       Map<String, dynamic> newMessage = {
-        'type': 'image',
+        'type': messageType,
         'from_me': true,
-        'image': {
-          'data': base64Image,
+        messageType: {
+          'data': base64Image, // For video, you might want to store a thumbnail or a different representation
         },
         'caption': caption,
         'timestamp': DateTime.now().millisecondsSinceEpoch ~/ 1000,
@@ -353,12 +388,13 @@ Future<void> sendImageMessage(String to, PlatformFile? imageFile, String caption
       setState(() {
         widget.messages.insert(0, newMessage);
         pickedFile = null; // Clear the picked file
+        _messageController.clear();
       });
     } else {
-      print('Failed to send image message: ${response.body}');
+      // Handle error
     }
   } catch (e) {
-    print('Error sending image message: $e');
+    // Handle exception
   }
 }
 
@@ -377,8 +413,7 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
 
     return downloadUrl;
   } catch (e) {
-    print('Error uploading image to Firebase Storage: $e');
-    rethrow;
+        rethrow;
   }
 }
 
@@ -403,14 +438,11 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
           snapshot.reference.update({
             'tags': tags,
           }).then((_) {
-            print('Stop bot status updated successfully in tags');
-          }).catchError((error) {
-            print('Failed to update stop bot status in tags: $error');
-          });
+                      }).catchError((error) {
+                      });
         }
       }).catchError((error) {
-        print('Failed to get document: $error');
-      });
+              });
   }
 
   @override
@@ -585,6 +617,7 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
                 child: Container(
              
                   child: ListView.builder(
+                     key: ValueKey<int>(widget.messages.length), // Add this key
                        controller: _scrollController, 
                     padding: const EdgeInsets.all(10),
                     itemCount: widget.messages.length,
@@ -639,8 +672,7 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
                             onDragEnd: (details) {
                               if (details.offset.dx < -50 && isSent) {  // Dragged left
                                 setState(() {
-                                  print(message);
-                                  replyToMessage = message;
+                                                                    replyToMessage = message;
                                 });
                               }else if (!isSent && details.offset.dx > 50) {  // Received message dragged right
                                 setState(() {
@@ -685,8 +717,7 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
                                                   ),
                                                 );
                                               } catch (e) {
-                                                print('Error decoding image: $e');
-                                                return _buildErrorWidget(context, isSent);
+                                                                                                return _buildErrorWidget(context, isSent);
                                               }
                                             } else if (message['image'] != null && message['image']['link'] != null) {
                                               return GestureDetector(
@@ -794,8 +825,7 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
                                                   ),
                                                 );
                                               } catch (e) {
-                                                print('Error decoding image: $e');
-                                                return _buildErrorWidget(context, isSent);
+                                                                                                return _buildErrorWidget(context, isSent);
                                               }
                                             } else if (message['image'] != null && message['image']['link'] != null) {
                                               return GestureDetector(
@@ -856,9 +886,14 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
                           );
                         } else {
                           final type = 'text';
-                          final messageText = message['body']??message['text']['body'];
+                         final messageText = message['body'] ?? message['text']?['body'] ?? '';
                           final isSent = (message['direction'] != 'inbound');
-                          DateTime parsedDateTime = DateTime.parse(message['dateAdded']).toLocal();
+                         DateTime? parsedDateTime;
+if (message['dateAdded'] != null) {
+  parsedDateTime = DateTime.parse(message['dateAdded']).toLocal();
+} else {
+  parsedDateTime = DateTime.now().toLocal(); // fallback to current time
+}
                           String formattedTime = DateFormat('h:mm a').format(parsedDateTime);
                           return Align(
                             alignment: isSent
@@ -880,22 +915,27 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
         if (pickedFile != null)
           Stack(
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: SizedBox(
-                  height: 200,
-                  child: (pickedFile!.extension?.toLowerCase() == 'mp4' && _controller != null)
-                      ? AspectRatio(
-                          aspectRatio: _controller!.value.aspectRatio,
-                          child: VideoPlayer(_controller!),
-                        )
-                      : Image.file(
-                          File(pickedFile!.path!),
-                          width: double.infinity,
-                          fit: BoxFit.contain,
-                        ),
-                ),
-              ),
+          ClipRRect(
+  borderRadius: BorderRadius.circular(8),
+  child: SizedBox(
+    height: 200,
+    child: (pickedFile!.extension?.toLowerCase() == 'mp4' || pickedFile!.extension?.toLowerCase() == 'mov')
+        ? (_controller != null
+            ? AspectRatio(
+                aspectRatio: _controller!.value.aspectRatio,
+                child: VideoPlayer(_controller!),
+              )
+            : Center(child: CircularProgressIndicator())) // Show a loading indicator while the video is initializing
+        : Image.file(
+            File(pickedFile!.path!),
+            width: double.infinity,
+            fit: BoxFit.contain,
+            errorBuilder: (context, error, stackTrace) {
+              return Center(child: Text('Failed to load image'));
+            },
+          ),
+  ),
+),
               GestureDetector(
                 onTap: () {
                   setState(() {
@@ -1011,22 +1051,28 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
                         
                         onSubmitted: (value) async {
                           if (pickedFile == null) {
-                            var newMessage = {
-                              'type': 'text',
-                              'direction': 'outgoing',
-                              'text': {'body': _messageController.text},
-                              'dateAdded': DateTime.now()
-                                  .toUtc()
-                                  .toIso8601String(),
-                            };
-      
-                            setState(() {
-                              widget.messages.insert(0, newMessage);
-                            });
+                           // Create the new message object
+  final newMessage = {
+    'type': 'text',
+    'from_me': true,
+    'text': {'body':  _messageController.text},
+    'timestamp': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    'chat_id': widget.chatId,
+    'direction': 'outgoing',
+  };
+
+  // Update UI first (optimistic update)
+  setState(() {
+    widget.messages = [newMessage, ...widget.messages]; // Create new list reference
+  
+    replyToMessage = null;
+  });
+
                             await sendTextMessage(
                                 widget.chatId!, _messageController.text);
                               _messageController.clear();    
                           } else {
+                            print('image');
                             await sendImageMessage(
                                 widget.conversation['id'],
                                 pickedFile!,
@@ -1072,19 +1118,23 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
                     icon: const Icon(Icons.send),
                     onPressed: () async {
                       if (pickedFile == null) {
-                        var newMessage = {
-                          'type': 'text',
-                          'direction': 'outgoing',
-                          'text': {'body': _messageController.text},
-                          'dateAdded': DateTime.now()
-                              .toUtc()
-                              .toIso8601String(),
-                        };
-      // Update the UI
-      setState(() {
-        widget.messages.insert(0, newMessage); // Add the new message to the beginning of the list
-        pickedFile = null; // Clear the picked file
-      });
+                       var newMessage = {
+    'type': 'text',
+    'direction': 'outgoing',
+    'text': {'body': _messageController.text},
+    'dateAdded': DateTime.now().toUtc().toIso8601String(),
+    'from_me': true, // Add this to match your message bubble logic
+    'chat_id': widget.chatId, // Add this to match your message filtering
+    'timestamp': DateTime.now().millisecondsSinceEpoch ~/ 1000, // Add this for consistent timestamp handling
+  };
+
+  // Create a new list reference to ensure setState triggers properly
+  setState(() {
+    widget.messages = [newMessage, ...widget.messages];
+
+    pickedFile = null;
+  });
+      print(widget.messages.length);
                         await sendTextMessage(
                             widget.chatId!, _messageController.text);
                       } else {
@@ -1092,11 +1142,17 @@ Future<String> uploadImageToFirebaseStorage(PlatformFile imageFile) async {
     
                          // Update the UI
                         if (widget.chatId != null) {
-                          await sendImageMessage(
+                          await (
                               widget.chatId!,
                               pickedFile!,
                               _messageController.text);
                         }
+                           print('image');
+                                   await sendImageMessage(
+                                widget.conversation['id'],
+                                pickedFile!,
+                                _messageController.text);
+                    
                       }
                        
                     },
@@ -1159,11 +1215,9 @@ void _openDocument(BuildContext context, Map<String, dynamic> document) async {
             autoSpacing: true,
             pageFling: true,
             onError: (error) {
-              print('Error: $error');
-            },
+                          },
             onPageError: (page, error) {
-              print('Page error: $error');
-            },
+                          },
           ),
         ),
       ),
@@ -1191,7 +1245,45 @@ Future<void> sendTextMessage(String to, String messageText) async {
   });
 
   try {
-    String url = 'https://mighty-dane-newly.ngrok-free.app/api/v2/messages/text/${widget.companyId}/${widget.chatId}';
+    // Fetch the current user
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) {
+      print("User not authenticated");
+      return;
+    }
+
+    // Fetch user document from Firestore
+    DocumentSnapshot userSnapshot = await FirebaseFirestore.instance
+        .collection('user')
+        .doc(user.email)
+        .get();
+
+    if (!userSnapshot.exists) {
+      print('No such user document!');
+      return;
+    }
+
+    // Extract companyId from user data
+    Map<String, dynamic> userData = userSnapshot.data() as Map<String, dynamic>;
+    String companyId = userData['companyId'];
+
+    // Fetch company document from Firestore
+    DocumentSnapshot companySnapshot = await FirebaseFirestore.instance
+        .collection('companies')
+        .doc(companyId)
+        .get();
+
+    if (!companySnapshot.exists) {
+      print('No such company document!');
+      return;
+    }
+
+    // Extract apiUrl from company data
+    Map<String, dynamic> companyData = companySnapshot.data() as Map<String, dynamic>;
+    String baseUrl = companyData['apiUrl'] ?? 'https://mighty-dane-newly.ngrok-free.app';
+
+    // Construct the request URL
+    String url = '$baseUrl/api/v2/messages/text/${widget.companyId}/${widget.chatId}';
     var body = json.encode({
       'message': messageText,
       'quotedMessageId': replyToMessage?['id'], // Add logic for reply if needed
@@ -1207,20 +1299,17 @@ Future<void> sendTextMessage(String to, String messageText) async {
       body: body,
     );
 
+    print(response.body);
     if (response.statusCode == 200) {
       // Message sent successfully
-     
       setState(() {
-         replyToMessage = null;
+        replyToMessage = null;
       });
-      print('Message sent successfully');
     } else {
       // Handle error
-      print('Error sending message: ${response.statusCode}');
     }
-  
   } catch (e) {
-    print('Error sending text message: $e');
+    // Handle exception
   }
 }
 
@@ -1229,8 +1318,7 @@ Future<void> sendTextMessage(String to, String messageText) async {
   }
 
   void _launchWhatsapp(String number) async {
-    print(number);
-    String url = 'https://wa.me/$number';
+        String url = 'https://wa.me/$number';
     try {
       await launch(url);
     } catch (e) {
@@ -1650,8 +1738,7 @@ Future<void> fetchQuickReplies() async {
       quickReplies = replies;
     });
   } catch (e) {
-    print('Error fetching quick replies: $e');
-  }
+      }
 }
 
 void _showQuickRepliesOverlay() {
@@ -1748,8 +1835,7 @@ void _handleQuickReplySelection(Map<String, dynamic> reply) async {
         });
       }
     } catch (e) {
-      print('Error downloading image: $e');
-    }
+          }
   }
 
   setState(() {

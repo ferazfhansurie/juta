@@ -111,11 +111,9 @@ class _HomeState extends State<Home> {
         setState(() {
           firstName = snapshot.get("name");
           company = snapshot.get("company");
-          print(firstName);
-        });
+                  });
       } else {
-        print("Snapshot not found");
-      }
+              }
     });
     _scaffoldKey.currentState?.openDrawer();
   }
@@ -136,18 +134,14 @@ class _HomeState extends State<Home> {
         Uri.parse(apiUrl),
         headers: {'Authorization': 'Bearer $apiKey'},
       );
-      print(response.body);
-      if (response.statusCode == 200) {
+            if (response.statusCode == 200) {
         // Parse the response JSON
         var userData = json.decode(response.body);
         // Now you have the user data, you can use it to populate your Drawer
-        print(userData);
-      } else {
-        print('Request failed with status: ${response.statusCode}');
-      }
+              } else {
+              }
     } catch (error) {
-      print('Error: $error');
-    }
+          }
   }
 
   @override

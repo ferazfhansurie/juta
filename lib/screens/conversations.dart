@@ -47,7 +47,7 @@ class _ConversationsState extends State<Conversations> {
   String firstName = '';
   String company = '';
   String companyId = '';
-  String? userPhone = '';
+  String? userPhone = '0';
   Map<String, String> phoneNames = {};
   final String baseUrl = "https://api.botpress.cloud";
   ScrollController _scrollController = ScrollController();
@@ -121,8 +121,7 @@ Future<List> getLocationTags() async {
 
     return availableTags;
   } catch (e) {
-    print('Error loading tags from Firebase: $e');
-    return [];
+        return [];
   }
 }
 Future<void> toggleTagSelection(String tag) async {
@@ -148,6 +147,8 @@ Future<void> toggleTagSelection(String tag) async {
 }
 Future<void> fetchConfigurations(bool refresh) async {
   email = user!.email!;
+ String userPhoneCount = '';
+   String phoneCount = '';
   await FirebaseFirestore.instance
       .collection("user")
       .doc(email)
@@ -158,32 +159,35 @@ Future<void> fetchConfigurations(bool refresh) async {
         firstName = snapshot.get("name") ?? "Default Name";
         company = snapshot.get("company") ?? "Default Company";
         companyId = snapshot.get("companyId") ?? "Default CompanyId";
-        role = snapshot.get("role") ?? "Default CompanyId"; userPhone = snapshot.get("phone")?.toString(); // Add this line
-        print('User details - Name: $firstName, Company: $company, Company ID: $companyId, Phone: $userPhone');
-
+        role = snapshot.get("role") ?? "Default CompanyId"; 
+        if(snapshot.data()!.containsKey("phone")){    
+        userPhone = snapshot.get("phone")?.toString()??''; // Add this line
+        }
+       
+        if(snapshot.data()!.containsKey("phoneCount")){
+        userPhoneCount = snapshot.get("phoneCount")?.toString()??''; // Add this line
+        }
+        
       });
-       FirebaseMessaging.instance.subscribeToTopic(companyId);
+ 
     } else {
-      print('User snapshot not found for email: $email');
-    }
+          }
   }).then((value) {
     if (companyId != null && companyId.isNotEmpty) {
-      print('Fetching company details for companyId: $companyId');
-      FirebaseFirestore.instance
+            FirebaseFirestore.instance
           .collection("companies")
           .doc(companyId)
           .get()
           .then((snapshot) async {
         if (snapshot.exists) {
-          print('Company snapshot found for companyId: $companyId');
-             if (mounted) {
+                       if (mounted) {
                setState(() {
                  var automationData = snapshot.data() as Map<String, dynamic>;
                    if(automationData.containsKey('v2')) {
                     v2 = snapshot.get("v2");
                   }
                   if(automationData.containsKey('phoneCount')){
-                              String phoneCount = snapshot.get("phoneCount");
+                     phoneCount = snapshot.get("phoneCount");
                               int phoneCountInt = int.parse(phoneCount);
                   phoneNames.clear(); // Clear existing phone names
                   for (int i = 0; i < phoneCountInt; i++) { // Changed from <= to <
@@ -195,8 +199,7 @@ Future<void> fetchConfigurations(bool refresh) async {
                       }
                     }
                   }
-              print('Retrieved phone names: $phoneNames');
-              
+                            
                   }
                   
                   if (automationData.containsKey('ghl_accessToken')){
@@ -210,24 +213,30 @@ Future<void> fetchConfigurations(bool refresh) async {
                if(automationData.containsKey('whapiToken')) {
                  whapiToken= snapshot.get("whapiToken");
                }
-               print("whapi"+v2.toString());
+           
            
           });
+               String topic = '';
+      if(userPhone != null && phoneCount != '' && phoneCount != "0" && userPhone!.isNotEmpty){
+        topic = '${companyId}_phone_${userPhone}';
+      } else {
+        topic = companyId;
+      }
+            // Modify subscription logic based on phone presence
+          FirebaseMessaging.instance.subscribeToTopic(topic);
+          print(topic);
                   await getLocationTags();
                   await fetchEmployeeNames();
                     await fetchContacts();
              }
 ;
         } else {
-          print('Company snapshot not found for companyId: $companyId');
-        }
+                  }
       });
     } else {
-      print('companyId is null or empty');
-    }
+          }
   });
-  print('Configuration fetching complete.');
-}
+  }
 Map<String, dynamic> getLatestMessageDetails(Map<String, dynamic> conversation) {
   String latestMessage = 'No message';
   DateTime latestTimestamp = DateTime.fromMillisecondsSinceEpoch(0);
@@ -252,8 +261,7 @@ Map<String, dynamic> getLatestMessageDetails(Map<String, dynamic> conversation) 
 }
 
 Future<void> fetchContacts() async {
-  print('Fetching contacts...');
-  try {
+    try {
     setState(() {
       _isLoading = true;
     });
@@ -270,8 +278,7 @@ Future<void> fetchContacts() async {
     final userDocRef = FirebaseFirestore.instance.collection("user").doc(email);
     final pinnedContactsSnapshot = await userDocRef.collection("pinned").get();
     final pinnedContacts = pinnedContactsSnapshot.docs.map((doc) => doc.data()['chat_id']).toList();
-    print("pinned");
-
+    
     // Merge pinned contacts and unread counts with contact data
     final List<Map<String, dynamic>> mergedContacts = List<Map<String, dynamic>>.from(contacts).map((contact) {
       final chatId = contact['chat_id'];
@@ -289,17 +296,14 @@ Future<void> fetchContacts() async {
       conversations = mergedContacts;
       _isLoading = false;
     });
-    print(contacts);
-  } catch (error) {
+      } catch (error) {
     setState(() {
       _isLoading = false;
     });
-    print('Error fetching contacts: $error');
-  }
+      }
 }
 Future<void> fetchMoreContacts() async {
-  print('Fetching contacts...');
-  try {
+    try {
   Toast.show(context, 'success', 'Fetching more data');
 
     // Fetch contacts from Firestore
@@ -314,8 +318,7 @@ Future<void> fetchMoreContacts() async {
     final userDocRef = FirebaseFirestore.instance.collection("user").doc(email);
     final pinnedContactsSnapshot = await userDocRef.collection("pinned").get();
     final pinnedContacts = pinnedContactsSnapshot.docs.map((doc) => doc.data()['chat_id']).toList();
-    print("pinned");
-
+    
 
     // Merge pinned contacts and unread counts with contact data
     final List<Map<String, dynamic>> mergedContacts = List<Map<String, dynamic>>.from(contacts).map((contact) {
@@ -334,15 +337,12 @@ Future<void> fetchMoreContacts() async {
       conversations = mergedContacts;
       _isLoading = false;
     });
-    print(contacts);
-  } catch (error) {
+      } catch (error) {
   
-    print('Error fetching contacts: $error');
-  }
+      }
 }
 Future<void> fetchContactsBackground() async {
-  print('Fetching contacts...');
-  try {
+    try {
  
 
     // Fetch contacts from Firestore
@@ -357,8 +357,7 @@ Future<void> fetchContactsBackground() async {
     final userDocRef = FirebaseFirestore.instance.collection("user").doc(email);
     final pinnedContactsSnapshot = await userDocRef.collection("pinned").get();
     final pinnedContacts = pinnedContactsSnapshot.docs.map((doc) => doc.data()['chat_id']).toList();
-    print("pinned");
-
+    
     // Merge pinned contacts and unread counts with contact data
     final List<Map<String, dynamic>> mergedContacts = List<Map<String, dynamic>>.from(contacts).map((contact) {
       final chatId = contact['chat_id'];
@@ -376,11 +375,9 @@ Future<void> fetchContactsBackground() async {
       conversations = mergedContacts;
 
     });
-    print(contacts);
-  } catch (error) {
+      } catch (error) {
   
-    print('Error fetching contacts: $error');
-  }
+      }
 }
 List<String> employeeNames = [];
 Future<void> fetchEmployeeNames() async {
@@ -396,26 +393,19 @@ Future<void> fetchEmployeeNames() async {
         .map((name) => name.toLowerCase())
         .toList();
   } catch (e) {
-    print('Error fetching employee names: $e');
-  }
+      }
 }
 List<Map<String, dynamic>> filteredConversations() {
   if (userPhone != null) {
-    print('\n--- Filtering Conversations ---');
-    print('Current userPhone: "$userPhone" (${userPhone.runtimeType})');
-    print('current conversations: ${conversations}');
-     conversations = conversations.where((conversation) {
+       
+         conversations = conversations.where((conversation) {
       // Check for both phoneIndexes array and single phoneIndex
       var phoneIndexes = conversation['phoneIndexes'];
       var singlePhoneIndex = conversation['phoneIndex'];
       int? userPhoneInt = int.tryParse(userPhone!);
       
       // Debug prints
-      print('\nChecking conversation: ${conversation['chat_id']}');
-      print('phoneIndexes: $phoneIndexes');
-      print('singlePhoneIndex: $singlePhoneIndex');
-      print('userPhoneInt: $userPhoneInt');
-      
+                              
       // Check if phoneIndexes array exists and includes userPhone
       if (phoneIndexes != null && phoneIndexes is List) {
         return phoneIndexes.contains(userPhoneInt);
@@ -516,8 +506,7 @@ conversations = conversations;
     } else if (timestamp is int) {
       latestTimestamp = DateTime.fromMillisecondsSinceEpoch(timestamp * 1000);
     } else {
-      print('Unexpected timestamp type: ${timestamp.runtimeType}');
-      latestTimestamp = DateTime.now(); // Fallback to current time
+            latestTimestamp = DateTime.now(); // Fallback to current time
     }
     }
 
@@ -567,16 +556,12 @@ conversations = conversations;
 
   return sortedConversations;
 }
-
 void _showAddTagDialog(Map<String, dynamic> conversation, ColorScheme colorScheme) {
   List<String> specialTags = ['Mine', 'All', 'Unassigned', 'Group', 'Unread'];
   List<dynamic> allTags = availableTags.where((tag) => !specialTags.contains(tag)).toList();
   List<String> selectedTags = List<String>.from(conversation['tags'] ?? [])
     .where((tag) => !specialTags.contains(tag)).toList();
   String newTag = '';
-
-  // Add a list of employee names
-  
   List<String> selectedEmployees = [];
 
   showDialog(
@@ -584,108 +569,116 @@ void _showAddTagDialog(Map<String, dynamic> conversation, ColorScheme colorSchem
     builder: (BuildContext context) {
       return StatefulBuilder(
         builder: (context, setState) {
-          return CupertinoTheme(
-            data: CupertinoThemeData(
-              brightness: isDarkMode ? Brightness.dark : Brightness.light,
-              primaryColor: CupertinoColors.systemBlue,
-            ),
-            child: CupertinoAlertDialog(
-              title: Text('Manage Tags', 
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: colorScheme.onBackground,
-                )
-              ),
-              content: Container(
-                height: MediaQuery.of(context).size.height * 0.5,
-                width: MediaQuery.of(context).size.width * 0.9,
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: CupertinoScrollbar(
-                        child: ListView(
-                          children: [
-                            _buildSectionHeader('Tags', colorScheme),
-                            ...allTags.map((tag) => _buildTagItem(
-                              tag: tag,
-                              isSelected: selectedTags.contains(tag),
-                              onChanged: (value) {
-                                setState(() {
-                                  if (value == true) {
-                                    selectedTags.add(tag);
-                                  } else {
-                                    selectedTags.remove(tag);
-                                  }
-                                });
-                              },
-                              colorScheme: colorScheme,
-                            )).toList(),
-                            
-                            _buildSectionHeader('Assign to Employee', colorScheme),
-                            ...employeeNames.map((employee) => _buildTagItem(
-                              tag: employee,
-                              isSelected: selectedEmployees.contains(employee),
-                              onChanged: (value) {
-                                setState(() {
-                                  if (value == true) {
-                                    selectedEmployees.add(employee);
-                                  } else {
-                                    selectedEmployees.remove(employee);
-                                  }
-                                });
-                              },
-                              colorScheme: colorScheme,
-                            )).toList(),
-                          ],
-                        ),
+          return Center(
+            child: Container(
+              width: MediaQuery.of(context).size.width * 0.96,
+              child: CupertinoTheme(
+                data: CupertinoThemeData(
+                  brightness: isDarkMode ? Brightness.dark : Brightness.light,
+                  primaryColor: CupertinoColors.systemBlue,
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: CupertinoAlertDialog(
+                    title: Text('Manage Tags', 
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.onBackground,
+                      )
+                    ),
+                    content: Container(
+                      height: MediaQuery.of(context).size.height * 0.5,
+                      width: double.maxFinite,
+                      child: Column(
+                        children: [
+                          Expanded(
+                            child: CupertinoScrollbar(
+                              child: ListView(
+                                children: [
+                                  _buildSectionHeader('Tags', colorScheme),
+                                  ...allTags.map((tag) => _buildTagItem(
+                                    tag: tag,
+                                    isSelected: selectedTags.contains(tag),
+                                    onChanged: (value) {
+                                      setState(() {
+                                        if (value == true) {
+                                          selectedTags.add(tag);
+                                        } else {
+                                          selectedTags.remove(tag);
+                                        }
+                                      });
+                                    },
+                                    colorScheme: colorScheme,
+                                  )).toList(),
+                                  
+                                  _buildSectionHeader('Assign to Employee', colorScheme),
+                                  ...employeeNames.map((employee) => _buildTagItem(
+                                    tag: employee,
+                                    isSelected: selectedEmployees.contains(employee),
+                                    onChanged: (value) {
+                                      setState(() {
+                                        if (value == true) {
+                                          selectedEmployees.add(employee);
+                                        } else {
+                                          selectedEmployees.remove(employee);
+                                        }
+                                      });
+                                    },
+                                    colorScheme: colorScheme,
+                                  )).toList(),
+                                ],
+                              ),
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          CupertinoTextField(
+                            placeholder: "Enter new tag",
+                            placeholderStyle: TextStyle(
+                              color: colorScheme.onBackground.withOpacity(0.6),
+                            ),
+                            style: TextStyle(color: colorScheme.onBackground),
+                            decoration: BoxDecoration(
+                              color: colorScheme.surface,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            onChanged: (value) {
+                              newTag = value;
+                            },
+                          ),
+                        ],
                       ),
                     ),
-                    SizedBox(height: 8),
-                    CupertinoTextField(
-                      placeholder: "Enter new tag",
-                      placeholderStyle: TextStyle(
-                        color: colorScheme.onBackground.withOpacity(0.6),
+                    actions: [
+                      CupertinoDialogAction(
+                        child: Text('Cancel'),
+                        onPressed: () => Navigator.of(context).pop(),
                       ),
-                      style: TextStyle(color: colorScheme.onBackground),
-                      decoration: BoxDecoration(
-                        color: colorScheme.surface,
-                        borderRadius: BorderRadius.circular(8),
+                      CupertinoDialogAction(
+                        child: Text('Add New Tag'),
+                        onPressed: () {
+                          if (newTag.isNotEmpty && !allTags.contains(newTag)) {
+                            setState(() {
+                              allTags.add(newTag);
+                              selectedTags.add(newTag);
+                              newTag = '';
+                            });
+                          }
+                        },
                       ),
-                      onChanged: (value) {
-                        newTag = value;
-                      },
-                    ),
-                  ],
+                      CupertinoDialogAction(
+                        isDefaultAction: true,
+                        child: Text('Save'),
+                        onPressed: () {
+                          List<String> updatedTags = [...selectedTags, ...selectedEmployees];
+                          _updateConversationTags(conversation, updatedTags,conversation['phone']);
+                          Navigator.of(context).pop();
+                        },
+                      ),
+                    ],
+                  ),
                 ),
               ),
-              actions: [
-                CupertinoDialogAction(
-                  child: Text('Cancel'),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                CupertinoDialogAction(
-                  child: Text('Add New Tag'),
-                  onPressed: () {
-                    if (newTag.isNotEmpty && !allTags.contains(newTag)) {
-                      setState(() {
-                        allTags.add(newTag);
-                        selectedTags.add(newTag);
-                        newTag = '';
-                      });
-                    }
-                  },
-                ),
-                CupertinoDialogAction(
-                  isDefaultAction: true,
-                  child: Text('Save'),
-                  onPressed: () {
-                    List<String> updatedTags = [...selectedTags, ...selectedEmployees];
-                    _updateConversationTags(conversation, updatedTags);
-                    Navigator.of(context).pop();
-                  },
-                ),
-              ],
             ),
           );
         },
@@ -693,15 +686,15 @@ void _showAddTagDialog(Map<String, dynamic> conversation, ColorScheme colorSchem
     },
   );
 }
-
-Future<void> _updateConversationTags(Map<String, dynamic> conversation, List<String> newTags) async {
+Future<void> _updateConversationTags(Map<String, dynamic> conversation, List<String> newTags,String chatId) async {
   try {
+    print(chatId);
     // Update the conversation in Firestore
     await FirebaseFirestore.instance
       .collection('companies')
       .doc(companyId)
       .collection('contacts')
-      .doc(conversation['id'])
+      .doc(chatId)
       .update({'tags': newTags});
     
     // Update the local state
@@ -713,8 +706,7 @@ Future<void> _updateConversationTags(Map<String, dynamic> conversation, List<Str
     
 _handleRefresh();
   } catch (e) {
-    print('Error updating tags: $e');
-  
+      
   }
 }
 
@@ -777,10 +769,8 @@ Future<void> markConversationAsRead(String chatId) async {
       }).toList();
     });
 
-    print('Marked conversation as read: $chatId');
-  } catch (error) {
-    print('Error marking conversation as read: $error');
-  }
+      } catch (error) {
+      }
 }
 
  void toggleDarkMode() {
@@ -908,8 +898,7 @@ Future<void> markConversationAsRead(String chatId) async {
                                                   'Phone switched to ${phoneNames[key]}');
                                                   
                                               } catch (e) {
-                                                print('Error updating phone in Firebase: $e');
-                                                Toast.show(context, 'error', 
+                                                                                                Toast.show(context, 'error', 
                                                   'Failed to update phone. Please try again.');
                                               }
                                             },
@@ -989,32 +978,54 @@ Future<void> markConversationAsRead(String chatId) async {
                                           child: Text('Cancel'),
                                           onPressed: () => Navigator.of(context).pop(),
                                         ),
-                                        CupertinoDialogAction(
-                                          isDefaultAction: true,
-                                          child: Text('Message'),
-                                          onPressed: () {
-                                            String phoneNumber = "+60${numberController.text.trim()}";
-                                            String chat = "$phoneNumber@s.whatsapp.net";
-                                            String chatId = chat.split('+')[1];
-                                            Navigator.of(context).pop();
-                                            Navigator.of(context).push(
-                                              CupertinoPageRoute(
-                                                builder: (context) => MessageScreen(
-                                                  chatId: chatId,
-                                                  messages: [],
-                                                  conversation: {},
-                                                  whapi: whapiToken,
-                                                  name: phoneNumber,
-                                                  phone: phoneNumber,
-                                                  accessToken: ghl,
-                                                  location: ghl_location,
-                                                  userName: firstName,
-                                                  phoneIndex: int.parse(userPhone!),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
+// ... existing code ...
+CupertinoDialogAction(
+  isDefaultAction: true,
+  child: Text('Message'),
+  onPressed: () {
+    print(numberController.text);
+    String phoneNumber = numberController.text.trim();
+    
+    // Clean the phone number: remove all non-digit characters
+    phoneNumber = phoneNumber.replaceAll(RegExp(r'[^\d]'), '');
+    
+    // Remove leading 60 if present
+    if (phoneNumber.startsWith('60')) {
+      phoneNumber = phoneNumber.substring(2);
+    }
+    
+    // Ensure the phone number is valid
+    if (phoneNumber.isEmpty) {
+      Toast.show(context, 'error', 'Please enter a valid phone number');
+      return;
+    }
+    
+    // Format the chat ID and display number
+    String chatId = "60$phoneNumber@c.us";
+    print(chatId);
+    String displayNumber = "+60$phoneNumber";
+    
+    Navigator.of(context).pop();
+    Navigator.of(context).push(
+      CupertinoPageRoute(
+        builder: (context) => MessageScreen(
+          chatId: chatId,
+          companyId: companyId,
+          messages: [],
+          conversation: {},
+          whapi: whapiToken,
+          name: displayNumber,
+          phone: displayNumber,
+          accessToken: ghl,
+          location: ghl_location,
+          userName: firstName,
+          phoneIndex: userPhone != null ? int.parse(userPhone!) : 0,
+        ),
+      ),
+    );
+  },
+),
+// ... existing code ...
                                       ],
                                     ),
                                   );
@@ -1108,7 +1119,7 @@ Future<void> markConversationAsRead(String chatId) async {
 
 
                 Container(
-                height: MediaQuery.of(context).size.height *74/100,
+                height: MediaQuery.of(context).size.height *72/100,
                 child: RefreshIndicator(
              
                   onRefresh: _handleRefresh,
@@ -1158,17 +1169,15 @@ Future<void> markConversationAsRead(String chatId) async {
                                 onLongPress: () => _showAddTagDialog(conversation, colorScheme) ,
                                 onTap: () async {
                                   ProgressDialog.show(context, progressDialogKey);
-  print(numberOnly);
-                                  if (conversation['unreadCount'] != 0) {
+                                    if (conversation['unreadCount'] != 0) {
     await markConversationAsRead("+"+numberOnly);
                                   }
-                                print(conversation);
-                             
+                                                             
  fetchMessagesForChat(conversation['chat_id'], conversation, userName, numberOnly,pic,conversation['phone'],tags,phoneIndex);
                                 },
                                 child: Container(
                                   decoration: BoxDecoration(
-      color: colorScheme.surface,
+
       borderRadius: BorderRadius.circular(12),
       boxShadow: [
         BoxShadow(
@@ -1366,7 +1375,6 @@ Future<void> markConversationAsRead(String chatId) async {
 Future<void> fetchMessagesForChat(String chatId, dynamic chat, String name, String phone, String? pic, String contactId, List<dynamic> tags,int phoneIndex) async {
   try {
     List<Map<String, dynamic>> messages = [];
-print(v2);
     if (v2) {
       // Fetch messages from Firebase
       QuerySnapshot messagesSnapshot = await FirebaseFirestore.instance
@@ -1397,8 +1405,7 @@ print(v2);
             return validType && validPhoneIndex;
           })
           .toList();
-      print(messages[0]);
-    } 
+          } 
     ProgressDialog.hide(progressDialogKey);
 
     Navigator.of(context)
@@ -1424,8 +1431,7 @@ print(v2);
       fetchContacts();
     });
   } catch (e) {
-    print('Error fetching messages for chat: $e');
-    ProgressDialog.hide(progressDialogKey);
+        ProgressDialog.hide(progressDialogKey);
   }
 }
 Future<dynamic> getContact(String number) async {
@@ -1447,21 +1453,17 @@ Future<dynamic> getContact(String number) async {
 
   // Send GET request
   var response = await http.get(url.replace(queryParameters: params), headers: headers);
-print(response);
   // Handle response
   if (response.statusCode == 200) {
     // Success
     var data = jsonDecode(response.body);
-    print(data['contact']);
-    setState(() {
+        setState(() {
      
     });
     return data['contact'];
   } else {
     // Error
-    print('Failed to get contact. Status code: ${response.statusCode}');
-    print('Response body: ${response.body}');
-    return null;
+            return null;
   }
 }
 Widget _buildSectionHeader(String title, ColorScheme colorScheme) {
@@ -1500,11 +1502,15 @@ Widget _buildTagItem({
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            tag,
-            style: TextStyle(
-              color: colorScheme.onBackground,
-              fontSize: 16,
+          Container(
+            width: 150,
+            child: Text(
+              tag,
+              style: TextStyle(
+                color: colorScheme.onBackground,
+                fontSize: 16,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ),
           if (isSelected)

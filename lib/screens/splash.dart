@@ -75,7 +75,7 @@ class _SplashScreenState extends State<SplashScreen> {
             child: Container(
               child: Padding(
                 padding: const EdgeInsets.all(8.0),
-                child: Image.asset('assets/images/logo_new.png',
+                child: Image.asset('assets/images/logo2.png',
                     fit: BoxFit.contain, width: 75),
               ),
             ),

@@ -48,8 +48,7 @@ Future<void> updateAppointment(String appointmentId, String timezone, String slo
     }),
   );
 
-  print(response.body);
-
+  
   if (response.statusCode == 200) {
     Navigator.pop(context);
   } else {
